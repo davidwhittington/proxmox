@@ -598,6 +598,23 @@ hostname</code></pre>
   <!-- STEP 3 — VM SETUP -->
   <section id="vm-setup">
     <h2><span class="phase-num">3</span> Create the VM</h2>
+
+    <div class="banner warning">
+      <div class="banner-icon">&#9888;</div>
+      <div class="banner-body">
+        <strong>VM ID 100 is illustrative</strong>
+        <p>The commands below use <code>100</code> as the VM ID. This is the example used throughout this guide. If you already have VMs running, pick an ID that isn't taken. To check what's already in use:</p>
+      </div>
+    </div>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># List existing VMs and their IDs</span>
+qm list
+
+<span class="comment"># Get the next available ID from Proxmox</span>
+pvesh get /cluster/nextid</code></pre>
+    </div>
+
     <div class="code-block">
       <button class="copy-btn" onclick="copyCode(this)">copy</button>
       <pre><code>qm create 100 \

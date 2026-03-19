@@ -58,6 +58,15 @@ The image is approximately 600MB. Check for an existing copy before downloading 
 
 ## Step 3 — Create the VM
 
+> **Note — VM ID 100 is illustrative.** The commands below use `100` as the VM ID throughout this guide. If you already have VMs running, use an ID that isn't taken. To check:
+> ```bash
+> # List existing VMs and their IDs
+> qm list
+>
+> # Get the next available ID from Proxmox
+> pvesh get /cluster/nextid
+> ```
+
 ```bash
 qm create 100 \
     --name ollama \
