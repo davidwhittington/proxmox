@@ -119,6 +119,8 @@ This creates a small ISO attached as a CD-ROM. The VM reads it on first boot to 
 
 ## Step 6 — Configure Cloud-Init
 
+The `--sshkeys` flag injects your public key into the VM's `authorized_keys` on first boot, enabling key-based SSH login without a password. Don't have a key pair yet? See [SSH Public Key Authentication](ssh-pubkey-auth.md).
+
 ```bash
 # Write SSH public key to temp file
 echo "{YOUR_PUBKEY}" > /tmp/vm-key.pub
@@ -193,22 +195,31 @@ Host ollama
     IdentityFile ~/.ssh/id_rsa
 ```
 
-Then connect with `ssh ollama`.
+Then connect with `ssh ollama`. For a full walkthrough of key generation, distribution, and disabling password auth, see [SSH Public Key Authentication](ssh-pubkey-auth.md).
 
 ---
 
 ## Step 11 — Create Your User Account (if using default ubuntu user)
 
-If cloud-init created a default `ubuntu` user and you want a named account:
+If cloud-init created a default `ubuntu` user and you want a named account, this block creates the user, sets a password, installs your SSH public key, locks down `.ssh` directory permissions, and grants passwordless sudo:
 
 ```bash
+# Create the user with a home directory and bash shell, add to sudo group
 sudo useradd -m -s /bin/bash -G sudo {username}
+
+# Set the user's password
 echo '{username}:{YOUR_PASSWORD}' | sudo chpasswd
+
+# Create .ssh directory and install your public key for key-based login
 sudo mkdir -p /home/{username}/.ssh
 echo "{YOUR_PUBKEY}" | sudo tee /home/{username}/.ssh/authorized_keys
+
+# Lock down .ssh permissions — SSH will reject keys if these are too open
 sudo chmod 700 /home/{username}/.ssh
 sudo chmod 600 /home/{username}/.ssh/authorized_keys
 sudo chown -R {username}:{username} /home/{username}/.ssh
+
+# Grant passwordless sudo
 echo '{username} ALL=(ALL) NOPASSWD:ALL' | sudo tee /etc/sudoers.d/{username}
 ```
 

@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SSH Public Key Authentication — Proxmox &amp; Guest VMs</title>
+  <meta name="description" content="How to set up SSH public key authentication between a client machine and Proxmox VE, and between Proxmox and guest VMs. Covers key generation, distribution, ssh-copy-id, and config aliases." />
+  <meta name="robots" content="index, follow" />
+  <meta property="og:type" content="article" />
+  <meta property="og:title" content="SSH Public Key Authentication — Proxmox &amp; Guest VMs" />
+  <meta property="og:description" content="Key generation, distribution via ssh-copy-id, cloud-init injection, and SSH config aliases across client, Proxmox host, and guest VMs." />
+  <meta property="og:url" content="https://davidwhittington.github.io/proxmox/ssh-pubkey-auth.html" />
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="SSH Public Key Authentication — Proxmox &amp; Guest VMs" />
+  <meta name="twitter:description" content="Key generation, distribution, and SSH config aliases across client, Proxmox host, and guest VMs." />
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --accent: #58a6ff;
+      --green: #3fb950;
+      --orange: #d29922;
+      --red: #f85149;
+      --code-bg: #1f2937;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      font-size: 15px;
+      line-height: 1.7;
+    }
+
+    /* NAV */
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 24px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .nav-brand {
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 14px;
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 24px;
+      list-style: none;
+    }
+
+    .nav-links a {
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 14px;
+      transition: color 0.15s;
+    }
+
+    .nav-links a:hover {
+      color: var(--text);
+    }
+
+    /* HERO */
+    .hero {
+      text-align: center;
+      padding: 72px 24px 56px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(88, 166, 255, 0.1);
+      border: 1px solid rgba(88, 166, 255, 0.3);
+      border-radius: 20px;
+      padding: 4px 14px;
+      font-size: 12px;
+      font-family: "SF Mono", "Fira Code", monospace;
+      color: var(--accent);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      margin-bottom: 20px;
+    }
+
+    .hero h1 {
+      font-size: clamp(24px, 4vw, 38px);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 16px;
+      line-height: 1.2;
+    }
+
+    .hero-subtitle {
+      color: var(--muted);
+      font-size: 16px;
+      max-width: 640px;
+      margin: 0 auto 28px;
+    }
+
+    .hero-meta {
+      display: flex;
+      justify-content: center;
+      gap: 24px;
+      flex-wrap: wrap;
+    }
+
+    .meta-tag {
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 12px;
+      color: var(--muted);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 4px 10px;
+    }
+
+    /* LAYOUT */
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    .content {
+      padding: 48px 0 80px;
+    }
+
+    /* SECTIONS */
+    section {
+      margin-bottom: 64px;
+    }
+
+    section h2 {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 20px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .phase-num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      background: rgba(88, 166, 255, 0.12);
+      border: 1px solid rgba(88, 166, 255, 0.3);
+      border-radius: 50%;
+      font-size: 12px;
+      font-family: "SF Mono", "Fira Code", monospace;
+      color: var(--accent);
+      flex-shrink: 0;
+    }
+
+    section h3 {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text);
+      margin: 28px 0 12px;
+    }
+
+    p {
+      color: var(--text);
+      margin-bottom: 14px;
+    }
+
+    p:last-child {
+      margin-bottom: 0;
+    }
+
+    ul, ol {
+      padding-left: 22px;
+      margin-bottom: 16px;
+    }
+
+    li {
+      margin-bottom: 6px;
+      font-size: 15px;
+      color: var(--text);
+    }
+
+    li code {
+      font-size: 13px;
+    }
+
+    /* BANNERS */
+    .banner {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      padding: 16px 20px;
+      border-radius: 8px;
+      margin: 20px 0;
+      border: 1px solid;
+    }
+
+    .banner-icon {
+      font-size: 18px;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    .banner-body {
+      flex: 1;
+    }
+
+    .banner-body strong {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 4px;
+      font-size: 14px;
+    }
+
+    .banner-body p {
+      font-size: 14px;
+      margin: 0;
+      line-height: 1.6;
+    }
+
+    .banner.info {
+      background: rgba(88, 166, 255, 0.08);
+      border-color: rgba(88, 166, 255, 0.3);
+    }
+
+    .banner.info .banner-body strong {
+      color: var(--accent);
+    }
+
+    .banner.warning {
+      background: rgba(210, 153, 34, 0.08);
+      border-color: rgba(210, 153, 34, 0.35);
+      color: var(--text);
+    }
+
+    .banner.warning .banner-body strong {
+      color: var(--orange);
+    }
+
+    .banner.success {
+      background: rgba(63, 185, 80, 0.08);
+      border-color: rgba(63, 185, 80, 0.35);
+    }
+
+    .banner.success .banner-body strong {
+      color: var(--green);
+    }
+
+    /* CODE BLOCKS */
+    .code-block {
+      position: relative;
+      margin: 16px 0;
+    }
+
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 18px 20px;
+      overflow-x: auto;
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    code {
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 13px;
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 2px 6px;
+      color: var(--text);
+    }
+
+    pre code {
+      background: none;
+      border: none;
+      padding: 0;
+      font-size: inherit;
+    }
+
+    .copy-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--muted);
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 11px;
+      padding: 4px 10px;
+      cursor: pointer;
+      transition: color 0.15s, border-color 0.15s;
+    }
+
+    .copy-btn:hover {
+      color: var(--text);
+      border-color: var(--muted);
+    }
+
+    .copy-btn.copied {
+      color: var(--green);
+      border-color: var(--green);
+    }
+
+    /* SYNTAX COLORS */
+    .comment { color: #6e7681; font-style: italic; }
+    .flag { color: #d2a8ff; }
+    .str { color: #a5d6ff; }
+    .cmd { color: #79c0ff; }
+    .kw { color: #ff7b72; }
+
+    /* TABLES */
+    .table-wrap {
+      overflow-x: auto;
+      margin: 16px 0;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+
+    thead th {
+      background: var(--surface);
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 10px 16px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+
+    tbody td {
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+
+    tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    tbody tr:nth-child(even) {
+      background: rgba(255, 255, 255, 0.015);
+    }
+
+    /* TOC */
+    .toc {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px 24px;
+      margin-bottom: 48px;
+    }
+
+    .toc h3 {
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin-bottom: 14px;
+    }
+
+    .toc ol {
+      padding-left: 20px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 4px 24px;
+    }
+
+    .toc li {
+      font-size: 14px;
+      margin-bottom: 4px;
+    }
+
+    .toc a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    .toc a:hover {
+      text-decoration: underline;
+    }
+
+    /* FOOTER */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 32px 24px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    footer a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    /* RESPONSIVE */
+    @media (max-width: 600px) {
+      .hero {
+        padding: 48px 16px 40px;
+      }
+
+      .hero-meta {
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+      }
+
+      nav {
+        padding: 0 16px;
+      }
+
+      .nav-links {
+        gap: 16px;
+      }
+
+      .container {
+        padding: 0 16px;
+      }
+
+      .toc ol {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <a class="nav-brand" href="index.html">proxmox/docs</a>
+  <ul class="nav-links">
+    <li><a href="#overview">Overview</a></li>
+    <li><a href="#client-to-proxmox">Client &rarr; Proxmox</a></li>
+    <li><a href="#client-to-vm">Client &rarr; VMs</a></li>
+    <li><a href="#proxmox-to-vm">Proxmox &rarr; VMs</a></li>
+    <li><a href="#ssh-config">SSH Config</a></li>
+  </ul>
+</nav>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-badge">&#128274; Proxmox &middot; SSH</div>
+  <h1>SSH Public Key Authentication</h1>
+  <p class="hero-subtitle">
+    Password-free access across your lab &mdash; client to Proxmox host, client to guest VMs, and Proxmox to guest VMs.
+  </p>
+  <div class="hero-meta">
+    <span class="meta-tag">ssh-keygen</span>
+    <span class="meta-tag">ssh-copy-id</span>
+    <span class="meta-tag">authorized_keys</span>
+    <span class="meta-tag">Proxmox VE</span>
+    <span class="meta-tag">Ubuntu</span>
+  </div>
+</div>
+
+<div class="container">
+<div class="content">
+
+  <!-- TOC -->
+  <div class="toc">
+    <h3>Contents</h3>
+    <ol>
+      <li><a href="#overview">Overview</a></li>
+      <li><a href="#prerequisites">Prerequisites</a></li>
+      <li><a href="#step-1">Generate a Key Pair</a></li>
+      <li><a href="#client-to-proxmox">Client &rarr; Proxmox Host</a></li>
+      <li><a href="#disable-passwords">Disable Password Auth (Hardening)</a></li>
+      <li><a href="#client-to-vm">Client &rarr; Guest VMs</a></li>
+      <li><a href="#proxmox-to-vm">Proxmox &rarr; Guest VMs</a></li>
+      <li><a href="#ssh-config">SSH Config Aliases</a></li>
+      <li><a href="#troubleshooting">Troubleshooting</a></li>
+      <li><a href="#changelog">Changelog</a></li>
+    </ol>
+  </div>
+
+  <!-- OVERVIEW -->
+  <section id="overview">
+    <h2>Overview</h2>
+
+    <div class="banner info">
+      <div class="banner-icon">&#9432;</div>
+      <div class="banner-body">
+        <strong>No passwords in your workflow</strong>
+        <p>A public key pair lets you SSH into any machine in your lab without typing a password. The private key stays on the client. The public key is copied to every host you want to reach. Once set up, a single <code>ssh ollama</code> gets you in.</p>
+      </div>
+    </div>
+
+    <p>This guide covers three connection paths:</p>
+    <ul>
+      <li><strong>Client &rarr; Proxmox host</strong> &mdash; so you can manage the hypervisor from your Mac without a password</li>
+      <li><strong>Client &rarr; Guest VMs</strong> &mdash; direct access from your Mac to any VM, either via cloud-init injection at provisioning time or manually after the fact</li>
+      <li><strong>Proxmox &rarr; Guest VMs</strong> &mdash; useful for automation, scripts, or backups running on the Proxmox host that need to SSH into guests</li>
+    </ul>
+  </section>
+
+  <!-- PREREQUISITES -->
+  <section id="prerequisites">
+    <h2>Prerequisites</h2>
+    <ul>
+      <li>A client machine (Mac or Linux) with SSH installed</li>
+      <li>SSH access to the Proxmox host (password-based initially, to bootstrap)</li>
+      <li>At least one guest VM running and reachable on the network</li>
+    </ul>
+
+    <div class="banner warning">
+      <div class="banner-icon">&#9888;</div>
+      <div class="banner-body">
+        <strong>Bootstrap access required</strong>
+        <p>You need some form of existing access (password, console) to push your public key to a host the first time. Once the key is in place, you can lock down passwords. Don't lock yourself out before the key is confirmed working.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- STEP 1 — GENERATE KEY PAIR -->
+  <section id="step-1">
+    <h2><span class="phase-num">1</span> Generate a Key Pair</h2>
+    <p>Run this on your <strong>client machine</strong> (Mac). Skip if you already have a key at <code>~/.ssh/id_rsa</code> or <code>~/.ssh/id_ed25519</code>.</p>
+
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Check for an existing key pair first</span>
+ls ~/.ssh/id_*.pub
+
+<span class="comment"># Generate a new Ed25519 key (preferred — smaller and faster than RSA)</span>
+ssh-keygen -t ed25519 -C "<span class="str">{your_email_or_label}</span>"
+
+<span class="comment"># Or RSA 4096 if you need broader compatibility</span>
+ssh-keygen -t rsa -b 4096 -C "<span class="str">{your_email_or_label}</span>"</code></pre>
+    </div>
+
+    <p>Accept the default path when prompted. Set a passphrase or leave it empty. On macOS, the key is stored in the Keychain and you won't be prompted after the first use.</p>
+
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Print your public key — this is what you copy to remote hosts</span>
+cat ~/.ssh/id_ed25519.pub</code></pre>
+    </div>
+
+    <p>The output looks like: <code>ssh-ed25519 AAAA... your_label</code>. This is the string you'll distribute. The private key (<code>id_ed25519</code>, no <code>.pub</code>) never leaves your machine.</p>
+  </section>
+
+  <!-- PART 1 — CLIENT TO PROXMOX -->
+  <section id="client-to-proxmox">
+    <h2><span class="phase-num">2</span> Client &rarr; Proxmox Host</h2>
+    <p>Push your public key to the Proxmox host using <code>ssh-copy-id</code>. This appends your key to <code>/root/.ssh/authorized_keys</code> on the host.</p>
+
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Copy your public key to the Proxmox root account</span>
+ssh-copy-id root@<span class="str">{PROXMOX_IP}</span></code></pre>
+    </div>
+
+    <p>You'll be prompted for the root password once. After that, test key-based login:</p>
+
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Verify — should connect without a password prompt</span>
+ssh root@<span class="str">{PROXMOX_IP}</span></code></pre>
+    </div>
+
+    <h3>Manual Method (if ssh-copy-id isn't available)</h3>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Append your public key over SSH in one line</span>
+cat ~/.ssh/id_ed25519.pub | ssh root@<span class="str">{PROXMOX_IP}</span> "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"</code></pre>
+    </div>
+  </section>
+
+  <!-- STEP 3 — DISABLE PASSWORDS -->
+  <section id="disable-passwords">
+    <h2><span class="phase-num">3</span> Disable Password Auth (Optional Hardening)</h2>
+
+    <div class="banner warning">
+      <div class="banner-icon">&#9888;</div>
+      <div class="banner-body">
+        <strong>Confirm key access before disabling passwords</strong>
+        <p>Open a second terminal and verify you can SSH in with your key while the current session is still open. If key auth fails after the config change, you still have the existing session to fix it.</p>
+      </div>
+    </div>
+
+    <p>Run this on the <strong>Proxmox host</strong> after confirming key-based login works:</p>
+
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Harden SSH — disable password and root password auth</span>
+sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
+sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config
+
+<span class="comment"># Reload SSH daemon to apply changes</span>
+systemctl reload sshd
+
+<span class="comment"># Verify the settings took effect</span>
+grep -E 'PasswordAuthentication|PermitRootLogin' /etc/ssh/sshd_config</code></pre>
+    </div>
+
+    <p><code>PermitRootLogin prohibit-password</code> keeps root login available via key but rejects password attempts. This is appropriate for a home lab where you need root access but want to close the password attack surface.</p>
+  </section>
+
+  <!-- PART 2 — CLIENT TO GUEST VMs -->
+  <section id="client-to-vm">
+    <h2><span class="phase-num">4</span> Client &rarr; Guest VMs</h2>
+    <p>Two paths depending on whether the VM already exists.</p>
+
+    <h3>New VM — Inject via Cloud-Init (preferred)</h3>
+    <p>When provisioning with cloud-init, the public key is baked in before first boot. The VM is SSH-ready the moment it comes up, with no post-boot steps.</p>
+
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Write your public key to a temp file on the Proxmox host</span>
+echo "<span class="str">{YOUR_PUBKEY}</span>" &gt; /tmp/vm-key.pub
+
+<span class="comment"># Inject the key during cloud-init configuration (run on Proxmox host)</span>
+qm set <span class="str">{VMID}</span> --sshkeys /tmp/vm-key.pub
+
+<span class="comment"># Clean up</span>
+rm /tmp/vm-key.pub</code></pre>
+    </div>
+
+    <p>See <a href="ubuntu-cloudinit-vm.html">Ubuntu Cloud-Init VM deployment guide</a> for the full provisioning workflow, including how this fits into Step 6.</p>
+
+    <h3>Existing VM — Push Key Manually</h3>
+    <p>For a VM that's already running, use <code>ssh-copy-id</code> from the client the same way as with the Proxmox host:</p>
+
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Copy your client public key to a running guest VM</span>
+ssh-copy-id <span class="str">{username}</span>@<span class="str">{VM_IP}</span>
+
+<span class="comment"># Verify</span>
+ssh <span class="str">{username}</span>@<span class="str">{VM_IP}</span></code></pre>
+    </div>
+
+    <h3>Hardening Guest VMs</h3>
+    <p>Same <code>sshd_config</code> changes apply to guest VMs. Run the same <code>sed</code> commands from the previous step inside the VM once key access is confirmed.</p>
+  </section>
+
+  <!-- PART 3 — PROXMOX TO GUEST VMs -->
+  <section id="proxmox-to-vm">
+    <h2><span class="phase-num">5</span> Proxmox &rarr; Guest VMs</h2>
+    <p>If you want Proxmox itself to SSH into guest VMs &mdash; for backup scripts, health checks, or automated tasks &mdash; you need a separate key pair on the Proxmox host and its public key in each guest's <code>authorized_keys</code>.</p>
+
+    <h3>Generate a Key Pair on Proxmox</h3>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Run on the Proxmox host as root</span>
+ssh-keygen -t ed25519 -C "proxmox-host" -f ~/.ssh/id_ed25519 -N ""
+
+<span class="comment"># Print the Proxmox host's public key</span>
+cat ~/.ssh/id_ed25519.pub</code></pre>
+    </div>
+
+    <p>The <code>-N ""</code> sets an empty passphrase, which is appropriate for automated/non-interactive use on a host you already control.</p>
+
+    <h3>Push the Proxmox Key to a Guest VM</h3>
+    <p>The guest needs to be running and reachable. If you already have client &rarr; VM access set up, you can relay through the client. Or use <code>ssh-copy-id</code> directly from Proxmox if the guest still allows password login:</p>
+
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Push Proxmox host key to a guest VM (run on Proxmox host)</span>
+ssh-copy-id <span class="str">{username}</span>@<span class="str">{VM_IP}</span>
+
+<span class="comment"># Test the connection from Proxmox to the guest</span>
+ssh <span class="str">{username}</span>@<span class="str">{VM_IP}</span> "hostname && uptime"</code></pre>
+    </div>
+
+    <h3>Relay via Client (if guest has no password auth)</h3>
+    <p>If the guest already has password auth disabled, use your client to append the Proxmox public key:</p>
+
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># From your client Mac — fetch Proxmox's pubkey and push it to the guest</span>
+PROXMOX_PUBKEY=$(ssh root@<span class="str">{PROXMOX_IP}</span> "cat ~/.ssh/id_ed25519.pub")
+ssh <span class="str">{username}</span>@<span class="str">{VM_IP}</span> "echo '$PROXMOX_PUBKEY' >> ~/.ssh/authorized_keys"</code></pre>
+    </div>
+  </section>
+
+  <!-- SSH CONFIG -->
+  <section id="ssh-config">
+    <h2><span class="phase-num">6</span> SSH Config Aliases</h2>
+    <p>Putting hosts in <code>~/.ssh/config</code> means you never type an IP again. <code>ssh proxmox</code>, <code>ssh ollama</code> &mdash; that's it.</p>
+
+    <h3>Client ~/.ssh/config</h3>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Add to ~/.ssh/config on your client Mac</span>
+
+Host proxmox
+    HostName <span class="str">{PROXMOX_IP}</span>
+    User root
+    IdentityFile ~/.ssh/id_ed25519
+
+Host ollama
+    HostName <span class="str">{VM_IP}</span>
+    User <span class="str">{username}</span>
+    IdentityFile ~/.ssh/id_ed25519</code></pre>
+    </div>
+
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Test your aliases</span>
+ssh proxmox "pveversion"
+ssh ollama "hostname"</code></pre>
+    </div>
+
+    <h3>Proxmox ~/.ssh/config (for Proxmox &rarr; VM access)</h3>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Add to ~/.ssh/config on the Proxmox host</span>
+
+Host ollama
+    HostName <span class="str">{VM_IP}</span>
+    User <span class="str">{username}</span>
+    IdentityFile ~/.ssh/id_ed25519</code></pre>
+    </div>
+
+    <p>After this, scripts running on Proxmox can call <code>ssh ollama "command"</code> without any IP or credential management.</p>
+  </section>
+
+  <!-- TROUBLESHOOTING -->
+  <section id="troubleshooting">
+    <h2>Troubleshooting</h2>
+
+    <h3>Permission Denied (publickey)</h3>
+    <p>Almost always a file permissions issue. SSH is strict &mdash; if <code>authorized_keys</code> or the <code>.ssh</code> directory is world-writable, the key will be silently rejected.</p>
+
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Fix permissions on the remote host</span>
+chmod 700 ~/.ssh
+chmod 600 ~/.ssh/authorized_keys
+chown -R $USER:$USER ~/.ssh</code></pre>
+    </div>
+
+    <h3>Wrong Key Being Offered</h3>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Run with verbose output to see which key is being tried</span>
+ssh -v <span class="str">{username}</span>@<span class="str">{HOST_IP}</span>
+
+<span class="comment"># Force a specific identity file</span>
+ssh -i ~/.ssh/id_ed25519 <span class="str">{username}</span>@<span class="str">{HOST_IP}</span></code></pre>
+    </div>
+
+    <h3>Key Not in authorized_keys</h3>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Check what keys are authorized on the remote host</span>
+cat ~/.ssh/authorized_keys
+
+<span class="comment"># Compare against your local public key</span>
+cat ~/.ssh/id_ed25519.pub</code></pre>
+    </div>
+
+    <h3>SELinux / AppArmor Context (rare on Ubuntu)</h3>
+    <p>On some hardened systems, SELinux can block <code>authorized_keys</code> reads even with correct file permissions. Check <code>/var/log/auth.log</code> on the remote host for detailed rejection reasons:</p>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Check SSH auth log on the remote host for rejection details</span>
+sudo tail -50 /var/log/auth.log | grep sshd</code></pre>
+    </div>
+  </section>
+
+  <!-- CHANGELOG -->
+  <section id="changelog">
+    <h2>Changelog</h2>
+    <ul>
+      <li><strong>2026-03-19</strong> &mdash; Initial guide: key generation, client-to-Proxmox, client-to-VM, Proxmox-to-VM, SSH config aliases, troubleshooting</li>
+    </ul>
+  </section>
+
+</div>
+</div>
+
+<footer>
+  <p>
+    <a href="https://github.com/davidwhittington/proxmox" target="_blank" rel="noopener">davidwhittington/proxmox</a>
+    &nbsp;&middot;&nbsp; proxmox/docs &nbsp;&middot;&nbsp; 2026-03-19
+  </p>
+</footer>
+
+<script>
+  function copyCode(btn) {
+    const pre = btn.nextElementSibling;
+    const text = pre.textContent;
+    navigator.clipboard.writeText(text).then(() => {
+      btn.textContent = 'copied';
+      btn.classList.add('copied');
+      setTimeout(() => {
+        btn.textContent = 'copy';
+        btn.classList.remove('copied');
+      }, 2000);
+    });
+  }
+</script>
+
+</body>
+</html>

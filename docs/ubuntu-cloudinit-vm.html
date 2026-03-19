@@ -675,6 +675,7 @@ qm set 100 --ide2 local-lvm:cloudinit</code></pre>
   <!-- STEP 6 -->
   <section id="step-6">
     <h2><span class="phase-num">6</span> Configure Cloud-Init</h2>
+    <p>The <code>--sshkeys</code> flag injects your public key into the VM's <code>authorized_keys</code> on first boot, enabling key-based SSH login without a password. Don't have a key pair yet? See <a href="ssh-pubkey-auth.html">SSH Public Key Authentication</a>.</p>
     <div class="code-block">
       <button class="copy-btn" onclick="copyCode(this)">copy</button>
       <pre><code><span class="comment"># Write SSH public key to temp file</span>
@@ -753,22 +754,31 @@ Host ollama
     IdentityFile ~/.ssh/id_rsa</code></pre>
     </div>
 
-    <p>Then connect with <code>ssh ollama</code>.</p>
+    <p>Then connect with <code>ssh ollama</code>. For a full walkthrough of key generation, distribution, and disabling password auth, see <a href="ssh-pubkey-auth.html">SSH Public Key Authentication</a>.</p>
   </section>
 
   <!-- STEP 11 -->
   <section id="step-11">
     <h2><span class="phase-num">11</span> Create Your User Account</h2>
-    <p>If cloud-init created a default <code>ubuntu</code> user and you want a named account instead:</p>
+    <p>If cloud-init created a default <code>ubuntu</code> user and you want a named account instead, this block creates the user, sets a password, installs your SSH public key, locks down the <code>.ssh</code> directory permissions, and grants passwordless sudo:</p>
     <div class="code-block">
       <button class="copy-btn" onclick="copyCode(this)">copy</button>
-      <pre><code>sudo useradd -m -s /bin/bash -G sudo <span class="str">{username}</span>
+      <pre><code><span class="comment"># Create the user with a home directory and bash shell, add to sudo group</span>
+sudo useradd -m -s /bin/bash -G sudo <span class="str">{username}</span>
+
+<span class="comment"># Set the user's password</span>
 echo '<span class="str">{username}</span>:<span class="str">{YOUR_PASSWORD}</span>' | sudo chpasswd
+
+<span class="comment"># Create .ssh directory and install your public key for key-based login</span>
 sudo mkdir -p /home/<span class="str">{username}</span>/.ssh
 echo "<span class="str">{YOUR_PUBKEY}</span>" | sudo tee /home/<span class="str">{username}</span>/.ssh/authorized_keys
+
+<span class="comment"># Lock down .ssh permissions — SSH will reject keys if these are too open</span>
 sudo chmod 700 /home/<span class="str">{username}</span>/.ssh
 sudo chmod 600 /home/<span class="str">{username}</span>/.ssh/authorized_keys
 sudo chown -R <span class="str">{username}</span>:<span class="str">{username}</span> /home/<span class="str">{username}</span>/.ssh
+
+<span class="comment"># Grant passwordless sudo</span>
 echo '<span class="str">{username}</span> ALL=(ALL) NOPASSWD:ALL' | sudo tee /etc/sudoers.d/<span class="str">{username}</span></code></pre>
     </div>
   </section>
