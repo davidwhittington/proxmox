@@ -1,0 +1,881 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Deploying Ubuntu 24.04 LTS via Cloud-Init on Proxmox VE</title>
+  <meta name="description" content="Complete guide to deploying Ubuntu 24.04 LTS on Proxmox VE using cloud-init — fully automated VM provisioning, no interactive installer, SSH-ready in under 2 minutes." />
+  <meta name="robots" content="index, follow" />
+  <meta property="og:type" content="article" />
+  <meta property="og:title" content="Deploying Ubuntu 24.04 LTS via Cloud-Init on Proxmox VE" />
+  <meta property="og:description" content="Complete guide to deploying Ubuntu 24.04 LTS on Proxmox VE using cloud-init — no interactive installer, SSH-ready in under 2 minutes." />
+  <meta property="og:url" content="https://davidwhittington.github.io/proxmox/ubuntu-cloudinit-vm.html" />
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="Deploying Ubuntu 24.04 LTS via Cloud-Init on Proxmox VE" />
+  <meta name="twitter:description" content="Fully automated VM provisioning on Proxmox VE — cloud-init, no interactive installer, SSH-ready in under 2 minutes." />
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --accent: #58a6ff;
+      --green: #3fb950;
+      --orange: #d29922;
+      --red: #f85149;
+      --code-bg: #1f2937;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      font-size: 15px;
+      line-height: 1.7;
+    }
+
+    /* NAV */
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 24px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .nav-brand {
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 14px;
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 24px;
+      list-style: none;
+    }
+
+    .nav-links a {
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 14px;
+      transition: color 0.15s;
+    }
+
+    .nav-links a:hover {
+      color: var(--text);
+    }
+
+    /* HERO */
+    .hero {
+      text-align: center;
+      padding: 72px 24px 56px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(88, 166, 255, 0.1);
+      border: 1px solid rgba(88, 166, 255, 0.3);
+      border-radius: 20px;
+      padding: 4px 14px;
+      font-size: 12px;
+      font-family: "SF Mono", "Fira Code", monospace;
+      color: var(--accent);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      margin-bottom: 20px;
+    }
+
+    .hero h1 {
+      font-size: clamp(24px, 4vw, 38px);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 16px;
+      line-height: 1.2;
+    }
+
+    .hero-subtitle {
+      color: var(--muted);
+      font-size: 16px;
+      max-width: 640px;
+      margin: 0 auto 28px;
+    }
+
+    .hero-meta {
+      display: flex;
+      justify-content: center;
+      gap: 24px;
+      flex-wrap: wrap;
+    }
+
+    .meta-tag {
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 12px;
+      color: var(--muted);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 4px 10px;
+    }
+
+    /* LAYOUT */
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    .content {
+      padding: 48px 0 80px;
+    }
+
+    /* SECTIONS */
+    section {
+      margin-bottom: 64px;
+    }
+
+    section h2 {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 20px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .phase-num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      background: rgba(88, 166, 255, 0.12);
+      border: 1px solid rgba(88, 166, 255, 0.3);
+      border-radius: 50%;
+      font-size: 12px;
+      font-family: "SF Mono", "Fira Code", monospace;
+      color: var(--accent);
+      flex-shrink: 0;
+    }
+
+    section h3 {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text);
+      margin: 28px 0 12px;
+    }
+
+    p {
+      color: var(--text);
+      margin-bottom: 14px;
+    }
+
+    p:last-child {
+      margin-bottom: 0;
+    }
+
+    ul, ol {
+      padding-left: 22px;
+      margin-bottom: 16px;
+    }
+
+    li {
+      margin-bottom: 6px;
+      font-size: 15px;
+      color: var(--text);
+    }
+
+    li code {
+      font-size: 13px;
+    }
+
+    /* BANNERS */
+    .banner {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      padding: 16px 20px;
+      border-radius: 8px;
+      margin: 20px 0;
+      border: 1px solid;
+    }
+
+    .banner-icon {
+      font-size: 18px;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    .banner-body {
+      flex: 1;
+    }
+
+    .banner-body strong {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 4px;
+      font-size: 14px;
+    }
+
+    .banner-body p {
+      font-size: 14px;
+      margin: 0;
+      line-height: 1.6;
+    }
+
+    .banner.info {
+      background: rgba(88, 166, 255, 0.08);
+      border-color: rgba(88, 166, 255, 0.3);
+    }
+
+    .banner.info .banner-body strong {
+      color: var(--accent);
+    }
+
+    .banner.warning {
+      background: rgba(210, 153, 34, 0.08);
+      border-color: rgba(210, 153, 34, 0.35);
+      color: var(--text);
+    }
+
+    .banner.warning .banner-body strong {
+      color: var(--orange);
+    }
+
+    .banner.success {
+      background: rgba(63, 185, 80, 0.08);
+      border-color: rgba(63, 185, 80, 0.35);
+    }
+
+    .banner.success .banner-body strong {
+      color: var(--green);
+    }
+
+    /* CODE BLOCKS */
+    .code-block {
+      position: relative;
+      margin: 16px 0;
+    }
+
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 18px 20px;
+      overflow-x: auto;
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    code {
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 13px;
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 2px 6px;
+      color: var(--text);
+    }
+
+    pre code {
+      background: none;
+      border: none;
+      padding: 0;
+      font-size: inherit;
+    }
+
+    .copy-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--muted);
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 11px;
+      padding: 4px 10px;
+      cursor: pointer;
+      transition: color 0.15s, border-color 0.15s;
+    }
+
+    .copy-btn:hover {
+      color: var(--text);
+      border-color: var(--muted);
+    }
+
+    .copy-btn.copied {
+      color: var(--green);
+      border-color: var(--green);
+    }
+
+    /* SYNTAX COLORS */
+    .comment { color: #6e7681; font-style: italic; }
+    .flag { color: #d2a8ff; }
+    .str { color: #a5d6ff; }
+    .cmd { color: #79c0ff; }
+    .kw { color: #ff7b72; }
+
+    /* TABLES */
+    .table-wrap {
+      overflow-x: auto;
+      margin: 16px 0;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+
+    thead th {
+      background: var(--surface);
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 10px 16px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+
+    tbody td {
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+
+    tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    tbody tr:nth-child(even) {
+      background: rgba(255, 255, 255, 0.015);
+    }
+
+    /* TOC */
+    .toc {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px 24px;
+      margin-bottom: 48px;
+    }
+
+    .toc h3 {
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin-bottom: 14px;
+    }
+
+    .toc ol {
+      padding-left: 20px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 4px 24px;
+    }
+
+    .toc li {
+      font-size: 14px;
+      margin-bottom: 4px;
+    }
+
+    .toc a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    .toc a:hover {
+      text-decoration: underline;
+    }
+
+    /* PARAM LIST */
+    .param-list {
+      margin: 16px 0;
+    }
+
+    .param-list dt {
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 13px;
+      color: var(--accent);
+      margin-top: 12px;
+      margin-bottom: 4px;
+    }
+
+    .param-list dd {
+      font-size: 14px;
+      color: var(--muted);
+      margin-left: 0;
+      padding-left: 16px;
+      border-left: 2px solid var(--border);
+    }
+
+    /* FOOTER */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 32px 24px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    footer a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    /* RESPONSIVE */
+    @media (max-width: 600px) {
+      .hero {
+        padding: 48px 16px 40px;
+      }
+
+      .hero-meta {
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+      }
+
+      nav {
+        padding: 0 16px;
+      }
+
+      .nav-links {
+        gap: 16px;
+      }
+
+      .container {
+        padding: 0 16px;
+      }
+
+      .toc ol {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <a class="nav-brand" href="index.html">proxmox/docs</a>
+  <ul class="nav-links">
+    <li><a href="#overview">Overview</a></li>
+    <li><a href="#vm-setup">VM Setup</a></li>
+    <li><a href="#cloud-init">Cloud-Init</a></li>
+    <li><a href="#ssh-access">SSH Access</a></li>
+    <li><a href="#notes">Notes</a></li>
+  </ul>
+</nav>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-badge">&#9881; Proxmox &middot; Cloud-Init</div>
+  <h1>Deploying Ubuntu 24.04 LTS via Cloud-Init</h1>
+  <p class="hero-subtitle">
+    Fully automated VM provisioning &mdash; no interactive installer, SSH-ready in under 2 minutes.
+  </p>
+  <div class="hero-meta">
+    <span class="meta-tag">Proxmox VE</span>
+    <span class="meta-tag">Ubuntu 24.04 LTS</span>
+    <span class="meta-tag">cloud-init</span>
+    <span class="meta-tag">q35</span>
+  </div>
+</div>
+
+<div class="container">
+<div class="content">
+
+  <!-- TOC -->
+  <div class="toc">
+    <h3>Contents</h3>
+    <ol>
+      <li><a href="#overview">Why Cloud Image over ISO</a></li>
+      <li><a href="#prerequisites">Prerequisites</a></li>
+      <li><a href="#step-1">Gather Environment Info</a></li>
+      <li><a href="#step-2">Download the Cloud Image</a></li>
+      <li><a href="#vm-setup">Create the VM</a></li>
+      <li><a href="#step-4">Import and Attach the Disk</a></li>
+      <li><a href="#cloud-init">Configure Cloud-Init</a></li>
+      <li><a href="#step-7">Boot Configuration</a></li>
+      <li><a href="#step-8">Start the VM</a></li>
+      <li><a href="#ssh-access">SSH Access</a></li>
+      <li><a href="#config-ref">Final Configuration Reference</a></li>
+      <li><a href="#notes">Notes</a></li>
+    </ol>
+  </div>
+
+  <!-- OVERVIEW -->
+  <section id="overview">
+    <h2>Why Cloud Image over ISO</h2>
+
+    <div class="banner info">
+      <div class="banner-icon">&#9432;</div>
+      <div class="banner-body">
+        <strong>No installer required</strong>
+        <p>The Ubuntu cloud image skips the interactive installer entirely. Cloud-init handles user creation, SSH key injection, DHCP network configuration, and hostname assignment on first boot. Download the image once and reuse it as a template base for every future VM.</p>
+      </div>
+    </div>
+
+    <ul>
+      <li>No interactive installer &mdash; fully automated via cloud-init</li>
+      <li>Cloud-init handles user creation, SSH key injection, network (DHCP), hostname</li>
+      <li>Boots to an SSH-accessible system in under 2 minutes</li>
+      <li>Image is reusable as a template base for cloning</li>
+    </ul>
+  </section>
+
+  <!-- PREREQUISITES -->
+  <section id="prerequisites">
+    <h2>Prerequisites</h2>
+    <ul>
+      <li>Proxmox VE host with at least one bridge (e.g. <code>vmbr0</code>)</li>
+      <li>Storage pool that supports disk images (e.g. <code>local-lvm</code> lvmthin)</li>
+      <li>SSH access to the Proxmox host as root</li>
+      <li>An SSH public key to inject</li>
+    </ul>
+  </section>
+
+  <!-- STEP 1 -->
+  <section id="step-1">
+    <h2><span class="phase-num">1</span> Gather Environment Info</h2>
+    <p>Before creating anything, confirm what's available on the host.</p>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Next available VM ID</span>
+pvesh get /cluster/nextid
+
+<span class="comment"># Available storage pools</span>
+pvesm status
+
+<span class="comment"># Network bridges</span>
+cat /etc/network/interfaces | grep -E '^iface|^auto'
+
+<span class="comment"># Node name</span>
+hostname</code></pre>
+    </div>
+  </section>
+
+  <!-- STEP 2 -->
+  <section id="step-2">
+    <h2><span class="phase-num">2</span> Download the Ubuntu 24.04 Cloud Image</h2>
+    <p>Pull the cloud image directly to the Proxmox ISO storage directory. Check for an existing copy first to avoid re-downloading ~600MB unnecessarily.</p>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code>wget -O /var/lib/vz/template/iso/noble-cloudimg-amd64.img \
+    https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img</code></pre>
+    </div>
+  </section>
+
+  <!-- STEP 3 — VM SETUP -->
+  <section id="vm-setup">
+    <h2><span class="phase-num">3</span> Create the VM</h2>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code>qm create 100 \
+    --name ollama \
+    --memory 16384 \
+    --cores 6 \
+    --sockets 1 \
+    --cpu host \
+    --net0 virtio,bridge=vmbr0 \
+    --ostype l26 \
+    --machine q35 \
+    --scsihw virtio-scsi-pci \
+    --onboot 0</code></pre>
+    </div>
+
+    <h3>Parameter Notes</h3>
+    <dl class="param-list">
+      <dt>--cpu host</dt>
+      <dd>Exposes host CPU features to the VM. Best for performance. Avoid if live migration between nodes is needed.</dd>
+      <dt>--machine q35</dt>
+      <dd>Modern chipset with PCIe support. Required for GPU passthrough in Phase 2.</dd>
+      <dt>--onboot 0</dt>
+      <dd>VM does not auto-start when Proxmox boots. Change to <code>1</code> if desired.</dd>
+      <dt>--scsihw virtio-scsi-pci</dt>
+      <dd>Required controller type for attaching the <code>scsi0</code> disk in the next step.</dd>
+    </dl>
+  </section>
+
+  <!-- STEP 4 -->
+  <section id="step-4">
+    <h2><span class="phase-num">4</span> Import and Attach the Disk</h2>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Import cloud image as VM disk</span>
+qm importdisk 100 /var/lib/vz/template/iso/noble-cloudimg-amd64.img local-lvm
+
+<span class="comment"># Attach as primary SCSI disk with discard and SSD flags</span>
+qm set 100 --scsi0 local-lvm:vm-100-disk-0,discard=on,ssd=1
+
+<span class="comment"># Resize to desired capacity (cloud image is ~3.5GB raw)</span>
+qm resize 100 scsi0 100G</code></pre>
+    </div>
+  </section>
+
+  <!-- STEP 5 — CLOUD-INIT -->
+  <section id="cloud-init">
+    <h2><span class="phase-num">5</span> Add Cloud-Init Drive</h2>
+    <p>This creates a small ISO attached as a CD-ROM. The VM reads it on first boot to configure itself. Without it, cloud-init has no source for its user data.</p>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code>qm set 100 --ide2 local-lvm:cloudinit</code></pre>
+    </div>
+  </section>
+
+  <!-- STEP 6 -->
+  <section id="step-6">
+    <h2><span class="phase-num">6</span> Configure Cloud-Init</h2>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Write SSH public key to temp file</span>
+echo "<span class="str">{YOUR_PUBKEY}</span>" &gt; /tmp/vm-key.pub
+
+<span class="comment"># Apply cloud-init settings</span>
+qm set 100 \
+    --ciuser <span class="str">{username}</span> \
+    --cipassword '<span class="str">{YOUR_PASSWORD}</span>' \
+    --sshkeys /tmp/vm-key.pub \
+    --ipconfig0 ip=dhcp \
+    --nameserver 8.8.8.8 \
+    --searchdomain local
+
+<span class="comment"># Clean up</span>
+rm /tmp/vm-key.pub</code></pre>
+    </div>
+  </section>
+
+  <!-- STEP 7 -->
+  <section id="step-7">
+    <h2><span class="phase-num">7</span> Boot Configuration</h2>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Set boot order to primary disk</span>
+qm set 100 --boot order=scsi0
+
+<span class="comment"># Add serial console (required for cloud-init output + noVNC serial tab)</span>
+qm set 100 --serial0 socket --vga serial0</code></pre>
+    </div>
+  </section>
+
+  <!-- STEP 8 -->
+  <section id="step-8">
+    <h2><span class="phase-num">8</span> Start the VM</h2>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code>qm start 100</code></pre>
+    </div>
+  </section>
+
+  <!-- STEP 9 — SSH ACCESS -->
+  <section id="ssh-access">
+    <h2><span class="phase-num">9</span> Find the VM's IP Address</h2>
+    <p>The VM gets its IP via DHCP from the network router &mdash; not from Proxmox. Proxmox does not track DHCP leases. A subnet ping-sweep populates the ARP table so you can grep for the VM's MAC address.</p>
+
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Ping-sweep the subnet to populate the ARP table</span>
+for i in $(seq 1 254); do ping -c1 -W1 192.168.X.$i &gt; /dev/null 2&gt;&amp;1 &amp; done
+wait
+
+<span class="comment"># Look up the VM's MAC address (shown in: qm config 100, under net0)</span>
+arp -an | grep -i "BC:24:11:XX:XX:XX"</code></pre>
+    </div>
+  </section>
+
+  <!-- STEP 10 -->
+  <section id="step-10">
+    <h2><span class="phase-num">10</span> Connect via SSH</h2>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code>ssh -o StrictHostKeyChecking=no <span class="str">{username}</span>@<span class="str">{VM_IP}</span></code></pre>
+    </div>
+
+    <p>Add a permanent alias to <code>~/.ssh/config</code> on the source Mac:</p>
+
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code>Host ollama
+    HostName <span class="str">{VM_IP}</span>
+    User <span class="str">{username}</span>
+    IdentityFile ~/.ssh/id_rsa</code></pre>
+    </div>
+
+    <p>Then connect with <code>ssh ollama</code>.</p>
+  </section>
+
+  <!-- STEP 11 -->
+  <section id="step-11">
+    <h2><span class="phase-num">11</span> Create Your User Account</h2>
+    <p>If cloud-init created a default <code>ubuntu</code> user and you want a named account instead:</p>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code>sudo useradd -m -s /bin/bash -G sudo <span class="str">{username}</span>
+echo '<span class="str">{username}</span>:<span class="str">{YOUR_PASSWORD}</span>' | sudo chpasswd
+sudo mkdir -p /home/<span class="str">{username}</span>/.ssh
+echo "<span class="str">{YOUR_PUBKEY}</span>" | sudo tee /home/<span class="str">{username}</span>/.ssh/authorized_keys
+sudo chmod 700 /home/<span class="str">{username}</span>/.ssh
+sudo chmod 600 /home/<span class="str">{username}</span>/.ssh/authorized_keys
+sudo chown -R <span class="str">{username}</span>:<span class="str">{username}</span> /home/<span class="str">{username}</span>/.ssh
+echo '<span class="str">{username}</span> ALL=(ALL) NOPASSWD:ALL' | sudo tee /etc/sudoers.d/<span class="str">{username}</span></code></pre>
+    </div>
+  </section>
+
+  <!-- FINAL CONFIG REFERENCE -->
+  <section id="config-ref">
+    <h2>Final VM Configuration Reference</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Setting</th>
+            <th>Value</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>VM ID</td>
+            <td><code>100</code></td>
+          </tr>
+          <tr>
+            <td>Name</td>
+            <td><code>ollama</code></td>
+          </tr>
+          <tr>
+            <td>CPU</td>
+            <td>6 cores, host type</td>
+          </tr>
+          <tr>
+            <td>RAM</td>
+            <td>16384 MB</td>
+          </tr>
+          <tr>
+            <td>Disk</td>
+            <td>100G, local-lvm, discard+ssd</td>
+          </tr>
+          <tr>
+            <td>Machine</td>
+            <td>q35</td>
+          </tr>
+          <tr>
+            <td>Network</td>
+            <td>virtio, vmbr0, DHCP</td>
+          </tr>
+          <tr>
+            <td>Cloud-init drive</td>
+            <td>ide2</td>
+          </tr>
+          <tr>
+            <td>Serial console</td>
+            <td>serial0 socket</td>
+          </tr>
+          <tr>
+            <td>Auto-start</td>
+            <td>disabled (onboot 0)</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- NOTES -->
+  <section id="notes">
+    <h2>Notes</h2>
+
+    <div class="banner warning">
+      <div class="banner-icon">&#9888;</div>
+      <div class="banner-body">
+        <strong>Proxmox MOTD &mdash; Strip ANSI on SSH</strong>
+        <p>The default Proxmox installation outputs large ANSI art on login. When scripting SSH commands from a Mac, pipe through this to strip escape sequences before processing output:</p>
+      </div>
+    </div>
+
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code>ssh root@<span class="str">{PROXMOX_IP}</span> "command" | python3 -c \
+  "import sys,re; [print(re.sub(r'\x1b\[[0-9;]*[A-Za-z]','',l).strip()) for l in sys.stdin if l.strip()]"</code></pre>
+    </div>
+
+    <h3>DHCP Discovery</h3>
+    <p>If the VM's IP isn't showing up via ARP, the lease is held by the network router, not Proxmox. The ping-sweep in Step 9 populates the ARP table so you can grep for the MAC. The MAC is visible in <code>qm config 100</code> under <code>net0</code>.</p>
+
+    <h3>Re-running Cloud-Init</h3>
+    <p>Cloud-init only runs on first boot. To re-run it after changing settings:</p>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code>sudo cloud-init clean &amp;&amp; sudo reboot</code></pre>
+    </div>
+
+    <div class="banner info">
+      <div class="banner-icon">&#9432;</div>
+      <div class="banner-body">
+        <strong>Phase 2 &mdash; GPU Passthrough</strong>
+        <p>AMD Vega 56 passthrough via Thunderbolt 4 eGPU is documented in <a href="proxmox-egpu.html">proxmox-egpu.html</a> in this directory. The q35 machine type and virtio-scsi-pci controller selected above are both prerequisites for that configuration.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- CHANGELOG -->
+  <section id="changelog">
+    <h2>Changelog</h2>
+    <ul>
+      <li><strong>2026-03-18</strong> &mdash; Initial deployment documented</li>
+    </ul>
+  </section>
+
+</div>
+</div>
+
+<footer>
+  <p>
+    <a href="https://github.com/davidwhittington/proxmox" target="_blank" rel="noopener">davidwhittington/proxmox</a>
+    &nbsp;&middot;&nbsp; proxmox/docs &nbsp;&middot;&nbsp; 2026-03-18
+  </p>
+</footer>
+
+<script>
+  function copyCode(btn) {
+    const pre = btn.nextElementSibling;
+    const text = pre.textContent;
+    navigator.clipboard.writeText(text).then(() => {
+      btn.textContent = 'copied';
+      btn.classList.add('copied');
+      setTimeout(() => {
+        btn.textContent = 'copy';
+        btn.classList.remove('copied');
+      }, 2000);
+    });
+  }
+</script>
+
+</body>
+</html>
