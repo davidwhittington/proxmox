@@ -507,6 +507,7 @@
       <li><a href="#proxmox-to-vm">Proxmox &rarr; Guest VMs</a></li>
       <li><a href="#ssh-config">SSH Config Aliases</a></li>
       <li><a href="#troubleshooting">Troubleshooting</a></li>
+      <li><a href="#post-quantum">Post-Quantum KEX &amp; Legacy Hosts</a></li>
       <li><a href="#changelog">Changelog</a></li>
     </ol>
   </div>
@@ -798,10 +799,130 @@ sudo tail -50 /var/log/auth.log | grep sshd</code></pre>
     </div>
   </section>
 
+  <!-- POST-QUANTUM KEX -->
+  <section id="post-quantum">
+    <h2>Post-Quantum KEX &amp; Legacy Hosts</h2>
+
+    <p>OpenSSH 8.5 introduced <code>sntrup761x25519-sha512@openssh.com</code> as its default key exchange algorithm &mdash; a hybrid that combines a classical elliptic-curve exchange with a post-quantum algorithm. OpenSSH 9.9 (shipped with macOS Sequoia and current Linux distributions) promoted <code>mlkem768x25519-sha256</code> (ML-KEM, from NIST FIPS 203) to the top of the default preference list.</p>
+
+    <p>When your client is newer than the server, you may see warnings, algorithm negotiation failures, or silent fallback depending on how large the version gap is. Here's what's happening, what the risks actually are, and what to do about it.</p>
+
+    <h3>What the Warnings Look Like</h3>
+
+    <p>A full failure &mdash; when the server doesn't support any algorithm in the client's list:</p>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code>Unable to negotiate with <span class="str">{HOST_IP}</span> port 22: no matching key exchange method found.
+Their offer: diffie-hellman-group14-sha1,diffie-hellman-group-exchange-sha256</code></pre>
+    </div>
+
+    <p>A negotiation warning with verbose output (<code>ssh -v</code>):</p>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code>debug1: kex: server->client cipher: aes128-ctr MAC: hmac-sha1 compression: none
+debug1: expecting SSH2_MSG_KEX_ECDH_REPLY
+<span class="comment"># Client fell back from mlkem768x25519 to curve25519 silently</span></code></pre>
+    </div>
+
+    <p>Silent fallback is the common case when the server is only slightly behind &mdash; the connection works but you're not getting the algorithm you thought you were. You'd only notice this with <code>ssh -v</code> or when auditing.</p>
+
+    <h3>Check What Your Server Actually Supports</h3>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Query the server's supported KEX algorithms without connecting</span>
+ssh -vv <span class="str">{username}</span>@<span class="str">{HOST_IP}</span> 2>&1 | grep -i "kex\|key exchange"
+
+<span class="comment"># Or check directly on the server</span>
+sshd -T | grep kexalgorithms</code></pre>
+    </div>
+
+    <h3>How to Suppress the Warnings</h3>
+
+    <div class="banner warning">
+      <div class="banner-icon">&#9888;</div>
+      <div class="banner-body">
+        <strong>Read the risk section before suppressing anything</strong>
+        <p>Suppressing these warnings is not harmless. It forces a permanent downgrade in cryptographic strength for that connection. Understand what you're trading away before adding these settings.</p>
+      </div>
+    </div>
+
+    <p>Per-host in <code>~/.ssh/config</code> &mdash; the right approach when targeting a specific legacy machine:</p>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Target only the specific host that needs the fallback</span>
+Host old-server
+    HostName <span class="str">{HOST_IP}</span>
+    User <span class="str">{username}</span>
+    <span class="comment"># Remove post-quantum algorithms from the offer for this host only</span>
+    KexAlgorithms -mlkem768x25519-sha256,-sntrup761x25519-sha512@openssh.com</code></pre>
+    </div>
+
+    <p>Per-connection, one-off override:</p>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Force classical KEX for a single connection</span>
+ssh -o KexAlgorithms=curve25519-sha256,ecdh-sha2-nistp521 <span class="str">{username}</span>@<span class="str">{HOST_IP}</span></code></pre>
+    </div>
+
+    <p>Global suppression in <code>~/.ssh/config</code> &mdash; applies to all hosts, which is almost never the right answer:</p>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Global override — affects every connection. Think carefully before using this.</span>
+Host *
+    KexAlgorithms -mlkem768x25519-sha256,-sntrup761x25519-sha512@openssh.com</code></pre>
+    </div>
+
+    <h3>Why You Should Think Carefully Before Suppressing</h3>
+
+    <div class="banner warning">
+      <div class="banner-icon">&#9888;</div>
+      <div class="banner-body">
+        <strong>Harvest now, decrypt later</strong>
+        <p>Nation-state actors and well-resourced adversaries are known to collect encrypted traffic today with the intent of decrypting it once cryptographically relevant quantum computers become viable. This is not a theoretical future concern &mdash; it's a documented present-day practice. Anything you send over a classical-only KEX session today could be in someone's archive waiting for that moment.</p>
+      </div>
+    </div>
+
+    <p>The risks of suppressing post-quantum KEX are real and worth laying out clearly:</p>
+
+    <ul>
+      <li><strong>Long-lived secrets become vulnerable.</strong> SSH sessions often carry credentials, private keys, and configuration data. If the session is recorded and later decrypted, everything in it is exposed &mdash; not just the connection itself but every secret transmitted during it.</li>
+      <li><strong>The fallback is permanent for that host.</strong> Once you add a <code>KexAlgorithms</code> override, it stays. You're committing to weaker cryptography every time you connect to that host until someone removes the config line and upgrades the server.</li>
+      <li><strong>The warning is useful signal.</strong> It's telling you the server is running outdated software. Suppressing the warning doesn't fix that &mdash; it just removes the reminder. The underlying gap remains.</li>
+      <li><strong>Global suppression spreads the risk everywhere.</strong> A <code>Host *</code> override disables post-quantum protection for every host you connect to, including future hosts that do support it. You've downgraded your entire SSH posture, not just the one legacy server.</li>
+      <li><strong>Lab habits become production habits.</strong> If you routinely silence crypto warnings in your home lab, that reflex carries over. Warnings exist to be acted on, not routed around.</li>
+    </ul>
+
+    <h3>The Right Fix: Update the Server</h3>
+
+    <p>Post-quantum KEX support is available in OpenSSH 8.5+ (for <code>sntrup761</code>) and 9.9+ (for ML-KEM). Ubuntu 24.04 ships OpenSSH 9.6, which supports <code>sntrup761x25519-sha512</code>. Proxmox VE 8.x on Debian 12 ships OpenSSH 9.2. Neither of these should be generating KEX warnings against a current macOS client.</p>
+
+    <p>If you're seeing warnings, check the server version first:</p>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Check OpenSSH version on the server</span>
+ssh --version
+sshd --version
+
+<span class="comment"># Update OpenSSH on Ubuntu/Debian</span>
+sudo apt update && sudo apt upgrade openssh-server</code></pre>
+    </div>
+
+    <p>For genuinely legacy hosts that cannot be updated &mdash; old network equipment, embedded systems, inherited infrastructure &mdash; scoped per-host suppression is the pragmatic choice. Apply it to the minimum set of hosts that actually need it, document why, and review it periodically. Don't let a temporary workaround quietly become permanent policy.</p>
+
+    <div class="banner info">
+      <div class="banner-icon">&#9432;</div>
+      <div class="banner-body">
+        <strong>In the context of this lab</strong>
+        <p>Proxmox VE 8+ on Debian 12 and Ubuntu 24.04 both support <code>sntrup761x25519-sha512</code>. If you're following the cloud-init provisioning guide and connecting from macOS Sequoia or later, KEX negotiation should succeed without any overrides. If it doesn't, update the server before reaching for a config workaround.</p>
+      </div>
+    </div>
+  </section>
+
   <!-- CHANGELOG -->
   <section id="changelog">
     <h2>Changelog</h2>
     <ul>
+      <li><strong>2026-03-19</strong> &mdash; Add post-quantum KEX section: warnings, risks, suppression methods, and why to update the server instead</li>
       <li><strong>2026-03-19</strong> &mdash; Initial guide: key generation, client-to-Proxmox, client-to-VM, Proxmox-to-VM, SSH config aliases, troubleshooting</li>
     </ul>
   </section>

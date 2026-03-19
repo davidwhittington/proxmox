@@ -231,8 +231,105 @@ sudo tail -50 /var/log/auth.log | grep sshd
 
 ---
 
+## Post-Quantum KEX & Legacy Hosts
+
+OpenSSH 8.5 introduced `sntrup761x25519-sha512@openssh.com` as its default key exchange algorithm — a hybrid combining classical elliptic-curve with a post-quantum algorithm. OpenSSH 9.9 (shipped with macOS Sequoia and current Linux distributions) promoted `mlkem768x25519-sha256` (ML-KEM, NIST FIPS 203) to the top of the preference list.
+
+When your client is newer than the server, you may see warnings, negotiation failures, or silent fallback depending on the version gap.
+
+---
+
+### What the Warnings Look Like
+
+A full failure — no common algorithm found:
+
+```
+Unable to negotiate with {HOST_IP} port 22: no matching key exchange method found.
+Their offer: diffie-hellman-group14-sha1,diffie-hellman-group-exchange-sha256
+```
+
+Silent fallback is more common. The connection succeeds but you're not getting the algorithm you expected. Run `ssh -v` to see what was actually negotiated:
+
+```bash
+ssh -v {username}@{HOST_IP} 2>&1 | grep -i "kex\|key exchange"
+```
+
+### Check What the Server Supports
+
+```bash
+# Query supported KEX algorithms on the server
+sshd -T | grep kexalgorithms
+
+# Or check the OpenSSH version
+sshd --version
+```
+
+---
+
+### How to Suppress the Warnings
+
+> **Read the risk section below before applying any of these.** Suppression forces a permanent cryptographic downgrade for that connection. It's not a neutral change.
+
+Per-host in `~/.ssh/config` — the right approach for a specific legacy machine:
+
+```
+# Target only the host that needs it
+Host old-server
+    HostName {HOST_IP}
+    User {username}
+    # Remove post-quantum algorithms from the offer for this host only
+    KexAlgorithms -mlkem768x25519-sha256,-sntrup761x25519-sha512@openssh.com
+```
+
+Per-connection, one-off:
+
+```bash
+# Force classical KEX for a single connection
+ssh -o KexAlgorithms=curve25519-sha256,ecdh-sha2-nistp521 {username}@{HOST_IP}
+```
+
+Global suppression in `~/.ssh/config` — affects every host, almost never the right answer:
+
+```
+# Global override — think carefully before using this
+Host *
+    KexAlgorithms -mlkem768x25519-sha256,-sntrup761x25519-sha512@openssh.com
+```
+
+---
+
+### Why You Should Think Carefully Before Suppressing
+
+**Harvest now, decrypt later.** Nation-state actors and well-resourced adversaries are known to collect encrypted traffic today with the intent of decrypting it once cryptographically relevant quantum computers become viable. This is not a theoretical future concern — it's a documented present-day practice. Anything sent over a classical-only KEX session today could be in someone's archive waiting for that moment.
+
+The specific risks:
+
+- **Long-lived secrets become vulnerable.** SSH sessions carry credentials, private keys, and configuration data. If the session is recorded and later decrypted, everything in it is exposed.
+- **The fallback is permanent for that host.** Once you add a `KexAlgorithms` override, it stays in place until someone removes it and upgrades the server. You're committing to weaker cryptography on every future connection.
+- **The warning is useful signal.** It's telling you the server is running outdated software. Suppressing it doesn't fix that — it just removes the reminder.
+- **Global suppression spreads the risk everywhere.** A `Host *` override disables post-quantum protection for every host, including future ones that do support it. You've downgraded your entire SSH posture.
+- **Lab habits become production habits.** If you routinely silence crypto warnings in your home lab, that reflex carries over. Warnings exist to be acted on.
+
+---
+
+### The Right Fix: Update the Server
+
+Post-quantum KEX is available in OpenSSH 8.5+ (sntrup761) and 9.9+ (ML-KEM). Ubuntu 24.04 ships OpenSSH 9.6. Proxmox VE 8.x on Debian 12 ships OpenSSH 9.2. Neither should generate KEX warnings against a current macOS client. If you're seeing them, update the server first.
+
+```bash
+# Update OpenSSH on Ubuntu/Debian
+sudo apt update && sudo apt upgrade openssh-server
+```
+
+For genuinely legacy hosts that can't be updated — old network equipment, embedded systems, inherited infrastructure — scoped per-host suppression is the pragmatic choice. Apply it to the minimum set of hosts that actually need it, document why, and review it periodically. Don't let a temporary workaround quietly become permanent policy.
+
+> **In the context of this lab:** Proxmox VE 8+ on Debian 12 and Ubuntu 24.04 both support `sntrup761x25519-sha512`. If you're following the cloud-init provisioning guide and connecting from macOS Sequoia or later, KEX negotiation should succeed without any overrides. If it doesn't, update the server before reaching for a config workaround.
+
+---
+
 ## Changelog
 
 | Date | Entry |
 |------|-------|
+| 2026-03-19 | Add post-quantum KEX section: warnings, risks, suppression methods, and why to update the server instead |
 | 2026-03-19 | Initial guide: key generation, client-to-Proxmox, client-to-VM, Proxmox-to-VM, SSH config aliases, troubleshooting |
