@@ -10,6 +10,26 @@ The end goal was GPU-accelerated LLM inference via Ollama in a KVM VM. It works 
 
 ## Guides
 
+### Deploying Ubuntu 24.04 via Cloud-Init
+
+**[Read the guide →](https://davidwhittington.github.io/proxmox/ubuntu-cloudinit-vm.html)**
+
+Fully automated Ubuntu 24.04 LTS VM provisioning using the noble cloud image — no interactive installer. Covers `qm create`, disk import and resize, SSH key injection via cloud-init, DHCP discovery, and SSH alias setup. Boots to a ready system in under 2 minutes.
+
+Raw Markdown: [`docs/ubuntu-cloudinit-vm.md`](docs/ubuntu-cloudinit-vm.md)
+
+---
+
+### Local LLM + RAG Pipeline
+
+**[Read the guide →](https://davidwhittington.github.io/ollama/)**
+
+Deploying Ollama on the Ubuntu VM, exposing the API to the local network, standing up Open WebUI and Chroma via Docker, and building a private RAG ingestion pipeline that indexes local files. Fully local — nothing leaves the network.
+
+Documented in: [`davidwhittington/ollama`](https://github.com/davidwhittington/ollama)
+
+---
+
 ### TB4 eGPU Passthrough — Blackmagic eGPU Pro + Proxmox VE
 
 **[Read the guide →](https://davidwhittington.github.io/proxmox/proxmox-egpu.html)**
@@ -49,3 +69,4 @@ Fully working as of 2026-03-18. Ollama reports 8GB VRAM and runs llama3.2 at ~85
 | Date | Entry |
 |------|-------|
 | 2026-03-18 | Initial commit: TB4 eGPU passthrough guide + HTML reference page |
+| 2026-03-18 | Add Ubuntu 24.04 cloud-init VM guide and Ollama RAG pipeline link |
