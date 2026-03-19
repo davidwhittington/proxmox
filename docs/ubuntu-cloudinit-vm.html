@@ -590,7 +590,8 @@ hostname</code></pre>
     <p>Pull the cloud image directly to the Proxmox ISO storage directory. Check for an existing copy first to avoid re-downloading ~600MB unnecessarily.</p>
     <div class="code-block">
       <button class="copy-btn" onclick="copyCode(this)">copy</button>
-      <pre><code>wget -O /var/lib/vz/template/iso/noble-cloudimg-amd64.img \
+      <pre><code><span class="comment"># Fetch cloud image to Proxmox ISO repository (skips download if already present)</span>
+wget -O /var/lib/vz/template/iso/noble-cloudimg-amd64.img \
     https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img</code></pre>
     </div>
   </section>
@@ -617,7 +618,8 @@ pvesh get /cluster/nextid</code></pre>
 
     <div class="code-block">
       <button class="copy-btn" onclick="copyCode(this)">copy</button>
-      <pre><code>qm create 100 \
+      <pre><code><span class="comment"># Create VM shell — hardware profile only, no disk or drives yet</span>
+qm create 100 \
     --name ollama \
     --memory 16384 \
     --cores 6 \
@@ -665,7 +667,8 @@ qm resize 100 scsi0 100G</code></pre>
     <p>This creates a small ISO attached as a CD-ROM. The VM reads it on first boot to configure itself. Without it, cloud-init has no source for its user data.</p>
     <div class="code-block">
       <button class="copy-btn" onclick="copyCode(this)">copy</button>
-      <pre><code>qm set 100 --ide2 local-lvm:cloudinit</code></pre>
+      <pre><code><span class="comment"># Attach cloud-init ISO to VM</span>
+qm set 100 --ide2 local-lvm:cloudinit</code></pre>
     </div>
   </section>
 
@@ -709,7 +712,8 @@ qm set 100 --serial0 socket --vga serial0</code></pre>
     <h2><span class="phase-num">8</span> Start the VM</h2>
     <div class="code-block">
       <button class="copy-btn" onclick="copyCode(this)">copy</button>
-      <pre><code>qm start 100</code></pre>
+      <pre><code><span class="comment"># Start the VM — cloud-init runs on first boot and configures the system</span>
+qm start 100</code></pre>
     </div>
   </section>
 
@@ -734,14 +738,16 @@ arp -an | grep -i "BC:24:11:XX:XX:XX"</code></pre>
     <h2><span class="phase-num">10</span> Connect via SSH</h2>
     <div class="code-block">
       <button class="copy-btn" onclick="copyCode(this)">copy</button>
-      <pre><code>ssh -o StrictHostKeyChecking=no <span class="str">{username}</span>@<span class="str">{VM_IP}</span></code></pre>
+      <pre><code><span class="comment"># First connection — suppress host key prompt since this is a fresh VM</span>
+ssh -o StrictHostKeyChecking=no <span class="str">{username}</span>@<span class="str">{VM_IP}</span></code></pre>
     </div>
 
     <p>Add a permanent alias to <code>~/.ssh/config</code> on the source Mac:</p>
 
     <div class="code-block">
       <button class="copy-btn" onclick="copyCode(this)">copy</button>
-      <pre><code>Host ollama
+      <pre><code><span class="comment"># Add to ~/.ssh/config for a persistent alias — then just: ssh ollama</span>
+Host ollama
     HostName <span class="str">{VM_IP}</span>
     User <span class="str">{username}</span>
     IdentityFile ~/.ssh/id_rsa</code></pre>

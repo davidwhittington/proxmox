@@ -48,6 +48,7 @@ hostname
 ## Step 2 — Download the Ubuntu 24.04 Cloud Image
 
 ```bash
+# Fetch cloud image to Proxmox ISO repository (skips download if already present)
 wget -O /var/lib/vz/template/iso/noble-cloudimg-amd64.img \
     https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img
 ```
@@ -68,6 +69,7 @@ The image is approximately 600MB. Check for an existing copy before downloading 
 > ```
 
 ```bash
+# Create VM shell — hardware profile only, no disk or drives yet
 qm create 100 \
     --name ollama \
     --memory 16384 \
@@ -107,6 +109,7 @@ qm resize 100 scsi0 100G
 ## Step 5 — Add Cloud-Init Drive
 
 ```bash
+# Attach cloud-init ISO to VM
 qm set 100 --ide2 local-lvm:cloudinit
 ```
 
@@ -150,6 +153,7 @@ qm set 100 --serial0 socket --vga serial0
 ## Step 8 — Start the VM
 
 ```bash
+# Start the VM — cloud-init runs on first boot and configures the system
 qm start 100
 ```
 
@@ -175,12 +179,14 @@ The MAC address is shown in `qm config 100` under `net0`.
 ## Step 10 — Connect via SSH
 
 ```bash
+# First connection — suppress host key prompt since this is a fresh VM
 ssh -o StrictHostKeyChecking=no {username}@{VM_IP}
 ```
 
 Add a permanent alias to `~/.ssh/config` on the source Mac:
 
 ```
+# Add to ~/.ssh/config for a persistent alias — then just: ssh ollama
 Host ollama
     HostName {VM_IP}
     User {username}
