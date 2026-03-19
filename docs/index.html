@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Proxmox Notes — ASUS NUC 14 PRO</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --accent: #58a6ff;
+      --green: #3fb950;
+      --orange: #d29922;
+      --code-bg: #1f2937;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      font-size: 16px;
+      line-height: 1.6;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    nav {
+      border-bottom: 1px solid var(--border);
+      padding: 0 32px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      background: rgba(13,17,23,0.95);
+      backdrop-filter: blur(8px);
+      z-index: 100;
+    }
+
+    .nav-brand {
+      font-weight: 600;
+      font-size: 15px;
+      color: var(--text);
+      text-decoration: none;
+      letter-spacing: -0.01em;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 24px;
+      list-style: none;
+    }
+
+    .nav-links a {
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 14px;
+      transition: color 0.15s;
+    }
+
+    .nav-links a:hover { color: var(--text); }
+
+    .hero {
+      padding: 80px 32px 64px;
+      text-align: center;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .hero-badge {
+      display: inline-block;
+      background: rgba(88,166,255,0.1);
+      border: 1px solid rgba(88,166,255,0.25);
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 4px 12px;
+      border-radius: 20px;
+      margin-bottom: 20px;
+    }
+
+    h1 {
+      font-size: clamp(28px, 4vw, 44px);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.15;
+      margin-bottom: 16px;
+    }
+
+    .hero-sub {
+      color: var(--muted);
+      font-size: 17px;
+      max-width: 560px;
+      margin: 0 auto 32px;
+      line-height: 1.6;
+    }
+
+    .hero-meta {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .meta-tag {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 12px;
+      font-family: "SF Mono", "Fira Code", monospace;
+      padding: 3px 10px;
+      border-radius: 4px;
+    }
+
+    .container {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 64px 32px;
+      flex: 1;
+    }
+
+    .guides-label {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 16px;
+    }
+
+    .guide-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 28px 32px;
+      text-decoration: none;
+      display: block;
+      transition: border-color 0.15s, background 0.15s;
+      margin-bottom: 16px;
+    }
+
+    .guide-card:hover {
+      border-color: var(--accent);
+      background: rgba(88,166,255,0.03);
+    }
+
+    .guide-card-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 10px;
+    }
+
+    .guide-card h2 {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--accent);
+      letter-spacing: -0.01em;
+    }
+
+    .guide-card-badge {
+      flex-shrink: 0;
+      background: rgba(63,185,80,0.1);
+      border: 1px solid rgba(63,185,80,0.25);
+      color: var(--green);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      padding: 3px 9px;
+      border-radius: 12px;
+    }
+
+    .guide-card p {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.6;
+      margin-bottom: 16px;
+    }
+
+    .guide-card-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .tag {
+      background: var(--code-bg);
+      color: var(--muted);
+      font-size: 11px;
+      font-family: "SF Mono", "Fira Code", monospace;
+      padding: 2px 8px;
+      border-radius: 3px;
+    }
+
+    .hw-section {
+      margin-top: 48px;
+    }
+
+    .hw-section h3 {
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 16px;
+    }
+
+    .hw-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 12px;
+    }
+
+    .hw-item {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 14px 16px;
+    }
+
+    .hw-item-label {
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .hw-item-value {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text);
+    }
+
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 24px 32px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    footer a { color: var(--muted); text-decoration: none; }
+    footer a:hover { color: var(--text); }
+
+    @media (max-width: 600px) {
+      .hero { padding: 48px 16px 40px; }
+      .container { padding: 40px 16px; }
+      nav { padding: 0 16px; }
+      .guide-card { padding: 20px; }
+      .guide-card-header { flex-direction: column; gap: 8px; }
+    }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-brand" href="#">proxmox</a>
+  <ul class="nav-links">
+    <li><a href="https://github.com/davidwhittington/proxmox" target="_blank" rel="noopener">GitHub</a></li>
+  </ul>
+</nav>
+
+<div class="hero">
+  <div class="hero-badge">&#9881; Personal Lab Notes</div>
+  <h1>Proxmox on an ASUS NUC 14 PRO</h1>
+  <p class="hero-sub">
+    Running Proxmox VE on Meteor Lake with a Blackmagic eGPU Pro.
+    Everything that broke, and exactly how it got fixed.
+  </p>
+  <div class="hero-meta">
+    <span class="meta-tag">Proxmox VE 9.1.6</span>
+    <span class="meta-tag">Core Ultra 7 165H</span>
+    <span class="meta-tag">Vega 56 / Thunderbolt 4</span>
+    <span class="meta-tag">Ollama 0.18.x</span>
+  </div>
+</div>
+
+<div class="container">
+
+  <div class="guides-label">Guides</div>
+
+  <a class="guide-card" href="proxmox-egpu.html">
+    <div class="guide-card-header">
+      <h2>TB4 eGPU Passthrough — Blackmagic eGPU Pro</h2>
+      <span class="guide-card-badge">&#10003; Working</span>
+    </div>
+    <p>
+      End-to-end walkthrough for passing a Thunderbolt 4 external GPU through to a KVM VM.
+      Covers every failure in sequence: wrong cable, TB authorization, boot hangs, NIC renaming,
+      AMD Vega's missing FLR, ROCm deprecation, and landing on Vulkan for Ollama inference.
+      85 tok/s on llama3.2 via the RADV Vulkan backend.
+    </p>
+    <div class="guide-card-tags">
+      <span class="tag">vfio-pci</span>
+      <span class="tag">thunderbolt</span>
+      <span class="tag">vendor-reset</span>
+      <span class="tag">kernel 6.17</span>
+      <span class="tag">Vega 10 / gfx900</span>
+      <span class="tag">Vulkan / RADV</span>
+      <span class="tag">Ollama</span>
+      <span class="tag">Secure Boot / MOK</span>
+    </div>
+  </a>
+
+  <div class="hw-section">
+    <h3>Hardware</h3>
+    <div class="hw-grid">
+      <div class="hw-item">
+        <div class="hw-item-label">Host</div>
+        <div class="hw-item-value">ASUS NUC 14 PRO</div>
+      </div>
+      <div class="hw-item">
+        <div class="hw-item-label">CPU</div>
+        <div class="hw-item-value">Intel Core Ultra 7 165H (Meteor Lake)</div>
+      </div>
+      <div class="hw-item">
+        <div class="hw-item-label">Proxmox</div>
+        <div class="hw-item-value">VE 9.1.6 · kernel 6.17.13-2-pve</div>
+      </div>
+      <div class="hw-item">
+        <div class="hw-item-label">eGPU</div>
+        <div class="hw-item-value">Blackmagic eGPU Pro · Vega 56 · 8GB HBM2</div>
+      </div>
+      <div class="hw-item">
+        <div class="hw-item-label">Connection</div>
+        <div class="hw-item-value">Thunderbolt 4 host · TB3 device (JHL7440)</div>
+      </div>
+      <div class="hw-item">
+        <div class="hw-item-label">Target VM</div>
+        <div class="hw-item-value">Ubuntu 24.04 · Ollama 0.18.x</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <p>
+    <a href="https://github.com/davidwhittington/proxmox" target="_blank" rel="noopener">github.com/davidwhittington/proxmox</a>
+    &nbsp;&middot;&nbsp; ASUS NUC 14 PRO &nbsp;&middot;&nbsp; Proxmox VE 9.1.6 &nbsp;&middot;&nbsp; 2026
+  </p>
+</footer>
+
+</body>
+</html>
