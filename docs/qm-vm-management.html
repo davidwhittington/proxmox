@@ -1,0 +1,904 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>qm VM Management — Proxmox Command Line</title>
+  <meta name="description" content="How to manage Proxmox VMs from the command line using qm — listing VMs, serial console access, start/stop/reboot, guest agent, snapshots, and configuration." />
+  <meta name="robots" content="index, follow" />
+  <meta property="og:type" content="article" />
+  <meta property="og:title" content="qm VM Management — Proxmox Command Line" />
+  <meta property="og:description" content="Managing Proxmox VMs from the command line: qm list, qm terminal, guest agent, snapshots, and configuration changes." />
+  <meta property="og:url" content="https://davidwhittington.github.io/proxmox/qm-vm-management.html" />
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="qm VM Management — Proxmox Command Line" />
+  <meta name="twitter:description" content="qm list, qm terminal, guest agent, snapshots, and VM config from the Proxmox shell." />
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --accent: #58a6ff;
+      --green: #3fb950;
+      --orange: #d29922;
+      --red: #f85149;
+      --code-bg: #1f2937;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      font-size: 15px;
+      line-height: 1.7;
+    }
+
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 24px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .nav-brand {
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 14px;
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 24px;
+      list-style: none;
+    }
+
+    .nav-links a {
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 14px;
+      transition: color 0.15s;
+    }
+
+    .nav-links a:hover { color: var(--text); }
+
+    .hero {
+      text-align: center;
+      padding: 72px 24px 56px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(88,166,255,0.1);
+      border: 1px solid rgba(88,166,255,0.3);
+      border-radius: 20px;
+      padding: 4px 14px;
+      font-size: 12px;
+      font-family: "SF Mono", "Fira Code", monospace;
+      color: var(--accent);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      margin-bottom: 20px;
+    }
+
+    .hero h1 {
+      font-size: clamp(24px, 4vw, 38px);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 16px;
+      line-height: 1.2;
+    }
+
+    .hero-subtitle {
+      color: var(--muted);
+      font-size: 16px;
+      max-width: 640px;
+      margin: 0 auto 28px;
+    }
+
+    .hero-meta {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .meta-tag {
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 12px;
+      color: var(--muted);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 4px 10px;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    .content {
+      padding: 48px 0 80px;
+    }
+
+    section {
+      margin-bottom: 64px;
+    }
+
+    section h2 {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 20px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .phase-num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      background: rgba(88,166,255,0.12);
+      border: 1px solid rgba(88,166,255,0.3);
+      border-radius: 50%;
+      font-size: 12px;
+      font-family: "SF Mono", "Fira Code", monospace;
+      color: var(--accent);
+      flex-shrink: 0;
+    }
+
+    section h3 {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text);
+      margin: 28px 0 12px;
+    }
+
+    p {
+      color: var(--text);
+      margin-bottom: 14px;
+    }
+
+    p:last-child { margin-bottom: 0; }
+
+    ul, ol {
+      padding-left: 22px;
+      margin-bottom: 16px;
+    }
+
+    li {
+      margin-bottom: 6px;
+      font-size: 15px;
+      color: var(--text);
+    }
+
+    li code { font-size: 13px; }
+
+    .banner {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      padding: 16px 20px;
+      border-radius: 8px;
+      margin: 20px 0;
+      border: 1px solid;
+    }
+
+    .banner-icon {
+      font-size: 18px;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    .banner-body { flex: 1; }
+
+    .banner-body strong {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 4px;
+      font-size: 14px;
+    }
+
+    .banner-body p {
+      font-size: 14px;
+      margin: 0;
+      line-height: 1.6;
+    }
+
+    .banner.info {
+      background: rgba(88,166,255,0.08);
+      border-color: rgba(88,166,255,0.3);
+    }
+
+    .banner.info .banner-body strong { color: var(--accent); }
+
+    .banner.warning {
+      background: rgba(210,153,34,0.08);
+      border-color: rgba(210,153,34,0.35);
+    }
+
+    .banner.warning .banner-body strong { color: var(--orange); }
+
+    .banner.success {
+      background: rgba(63,185,80,0.08);
+      border-color: rgba(63,185,80,0.35);
+    }
+
+    .banner.success .banner-body strong { color: var(--green); }
+
+    .code-block {
+      position: relative;
+      margin: 16px 0;
+    }
+
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 18px 20px;
+      overflow-x: auto;
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    code {
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 13px;
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 2px 6px;
+      color: var(--text);
+    }
+
+    pre code {
+      background: none;
+      border: none;
+      padding: 0;
+      font-size: inherit;
+    }
+
+    .copy-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--muted);
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 11px;
+      padding: 4px 10px;
+      cursor: pointer;
+      transition: color 0.15s, border-color 0.15s;
+    }
+
+    .copy-btn:hover {
+      color: var(--text);
+      border-color: var(--muted);
+    }
+
+    .copy-btn.copied {
+      color: var(--green);
+      border-color: var(--green);
+    }
+
+    .comment { color: #6e7681; font-style: italic; }
+    .flag { color: #d2a8ff; }
+    .str { color: #a5d6ff; }
+    .cmd { color: #79c0ff; }
+    .kw { color: #ff7b72; }
+    .out { color: #8b949e; }
+
+    .table-wrap {
+      overflow-x: auto;
+      margin: 16px 0;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+
+    thead th {
+      background: var(--surface);
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 10px 16px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+
+    tbody td {
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+
+    tbody td code { white-space: nowrap; }
+
+    tbody tr:last-child td { border-bottom: none; }
+
+    tbody tr:nth-child(even) { background: rgba(255,255,255,0.015); }
+
+    .toc {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px 24px;
+      margin-bottom: 48px;
+    }
+
+    .toc h3 {
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin: 0 0 12px;
+    }
+
+    .toc ol {
+      padding-left: 20px;
+      margin: 0;
+    }
+
+    .toc li {
+      margin-bottom: 4px;
+      font-size: 14px;
+    }
+
+    .toc a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    .toc a:hover { text-decoration: underline; }
+
+    .kbd {
+      display: inline-block;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-bottom-width: 2px;
+      border-radius: 4px;
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 12px;
+      color: var(--text);
+      padding: 2px 7px;
+      line-height: 1.5;
+    }
+
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 24px 32px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    footer a { color: var(--muted); text-decoration: none; }
+    footer a:hover { color: var(--text); }
+
+    @media (max-width: 600px) {
+      .hero { padding: 48px 16px 40px; }
+      .content { padding: 32px 0 60px; }
+      nav { padding: 0 16px; }
+    }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-brand" href="index.html">proxmox</a>
+  <ul class="nav-links">
+    <li><a href="index.html">Guides</a></li>
+    <li><a href="https://github.com/davidwhittington/proxmox" target="_blank" rel="noopener">GitHub</a></li>
+  </ul>
+</nav>
+
+<div class="hero">
+  <div class="hero-badge">&#9881; Reference</div>
+  <h1>qm VM Management</h1>
+  <p class="hero-subtitle">
+    Managing Proxmox VMs from the command line. Listing, console access, start/stop,
+    guest agent, snapshots, and live config changes.
+  </p>
+  <div class="hero-meta">
+    <span class="meta-tag">Proxmox VE 8+</span>
+    <span class="meta-tag">qm</span>
+    <span class="meta-tag">qemu-guest-agent</span>
+    <span class="meta-tag">serial console</span>
+  </div>
+</div>
+
+<div class="container">
+<div class="content">
+
+  <div class="toc">
+    <h3>Contents</h3>
+    <ol>
+      <li><a href="#list">Listing VMs</a></li>
+      <li><a href="#terminal">Serial Console — qm terminal</a></li>
+      <li><a href="#setup">Setting Up Serial Console</a></li>
+      <li><a href="#power">Starting, Stopping, Restarting</a></li>
+      <li><a href="#status">Checking VM Status</a></li>
+      <li><a href="#config">Viewing and Modifying Config</a></li>
+      <li><a href="#agent">QEMU Guest Agent</a></li>
+      <li><a href="#snapshots">Snapshots</a></li>
+      <li><a href="#clone">Cloning</a></li>
+      <li><a href="#exec">Running Commands via Guest Agent</a></li>
+      <li><a href="#quickref">Quick Reference</a></li>
+    </ol>
+  </div>
+
+  <!-- LIST -->
+  <section id="list">
+    <h2>Listing VMs</h2>
+
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="cmd">qm list</span></code></pre>
+    </div>
+
+    <p>Sample output:</p>
+
+    <div class="code-block">
+      <pre><code><span class="out">      VMID NAME                 STATUS     MEM(MB)    BOOTDISK(GB) PID
+       100 giraffe              running       49152        200.00 2847301
+       200 flamingo             running        2048         32.00 2847618
+       304 pangolin             running        2048         32.00 136623
+       900 tapir                running        4096         32.00 2848012
+       910 okapi                running        4096         32.00 2848199</span></code></pre>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Column</th>
+            <th>Meaning</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td><code>VMID</code></td><td>Numeric ID used in all <code>qm</code> commands</td></tr>
+          <tr><td><code>NAME</code></td><td>Friendly name set at creation time</td></tr>
+          <tr><td><code>STATUS</code></td><td><code>running</code>, <code>stopped</code>, or <code>paused</code></td></tr>
+          <tr><td><code>MEM(MB)</code></td><td>RAM allocated to the VM</td></tr>
+          <tr><td><code>BOOTDISK(GB)</code></td><td>Size of the primary disk</td></tr>
+          <tr><td><code>PID</code></td><td>Host kernel PID of the QEMU process (running VMs only)</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- TERMINAL -->
+  <section id="terminal">
+    <h2>Serial Console — qm terminal</h2>
+
+    <p>
+      Once a VM has a serial port configured, you can open a direct console from the Proxmox host
+      without needing SSH or the web UI's noVNC viewer.
+    </p>
+
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="cmd">qm terminal</span> <span class="flag">&lt;vmid&gt;</span></code></pre>
+    </div>
+
+    <p>Example session:</p>
+
+    <div class="code-block">
+      <pre><code><span class="out">starting serial terminal on interface serial0 (press Ctrl+O to exit)
+
+giraffe login: david
+Password:
+Last login: Fri Mar 20 08:14:22 UTC 2026
+
+david@giraffe:~$</span></code></pre>
+    </div>
+
+    <div class="banner info">
+      <div class="banner-icon">&#9432;</div>
+      <div class="banner-body">
+        <strong>How to exit</strong>
+        <p>Press <span class="kbd">Ctrl</span> + <span class="kbd">O</span> to close the serial terminal and return to the Proxmox shell.</p>
+      </div>
+    </div>
+
+    <p>
+      The serial terminal is a raw connection over a virtual UART — no network stack involved.
+      It works even when SSH is down, the network is misconfigured, or the VM is mid-boot.
+      It's the right tool for editing <code>/etc/netplan/</code>, recovering from a bad sshd config,
+      or watching boot output.
+    </p>
+  </section>
+
+  <!-- SETUP -->
+  <section id="setup">
+    <h2>Setting Up Serial Console</h2>
+
+    <h3>Why it might not work</h3>
+    <ul>
+      <li>Serial port not added to the Proxmox VM config</li>
+      <li>Guest OS not configured to output to <code>ttyS0</code></li>
+      <li>VM was started before the serial port was added — needs a full stop/start (not just a reset)</li>
+    </ul>
+
+    <h3><span class="phase-num">1</span>&nbsp; Add the serial port in Proxmox</h3>
+
+    <p>Run on the Proxmox host:</p>
+
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="cmd">qm set</span> <span class="flag">&lt;vmid&gt;</span> <span class="flag">--serial0</span> <span class="str">socket</span></code></pre>
+    </div>
+
+    <div class="banner warning">
+      <div class="banner-icon">&#9888;</div>
+      <div class="banner-body">
+        <strong>Requires a stop/start cycle</strong>
+        <p>The virtual serial device only appears in the guest after a full <code>qm stop</code> + <code>qm start</code>. A <code>qm reset</code> is not sufficient — QEMU must fully reinitialize.</p>
+      </div>
+    </div>
+
+    <h3><span class="phase-num">2</span>&nbsp; Configure the guest OS</h3>
+
+    <p>SSH into the VM and run:</p>
+
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Tell the kernel to output to both VGA and serial</span>
+sudo sed -i <span class="str">'s/GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT="console=tty0 console=ttyS0,115200n8"/'</span> /etc/default/grub
+sudo update-grub
+
+<span class="comment"># Enable a login prompt on ttyS0</span>
+sudo systemctl enable serial-getty@ttyS0.service</code></pre>
+    </div>
+
+    <h3><span class="phase-num">3</span>&nbsp; Restart the VM from Proxmox</h3>
+
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="cmd">qm stop</span> <span class="flag">&lt;vmid&gt;</span>
+<span class="cmd">qm start</span> <span class="flag">&lt;vmid&gt;</span></code></pre>
+    </div>
+
+    <h3><span class="phase-num">4</span>&nbsp; Verify</h3>
+
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="cmd">qm terminal</span> <span class="flag">&lt;vmid&gt;</span>
+<span class="out">starting serial terminal on interface serial0 (press Ctrl+O to exit)</span></code></pre>
+    </div>
+
+    <div class="banner success">
+      <div class="banner-icon">&#10003;</div>
+      <div class="banner-body">
+        <strong>Bulk setup across multiple VMs</strong>
+        <p>To configure several VMs at once, SSH into each guest in parallel and run the grub + getty steps, then do a bulk stop/start from Proxmox:</p>
+      </div>
+    </div>
+
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Stop all in parallel, then start</span>
+<span class="kw">for</span> id in 200 304 900 910; <span class="kw">do</span> <span class="cmd">qm stop</span> $id <span class="flag">--timeout</span> 15 &amp; <span class="kw">done</span>; wait
+<span class="kw">for</span> id in 200 304 900 910; <span class="kw">do</span> <span class="cmd">qm start</span> $id; <span class="kw">done</span></code></pre>
+    </div>
+  </section>
+
+  <!-- POWER -->
+  <section id="power">
+    <h2>Starting, Stopping, and Restarting</h2>
+
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Start a stopped VM</span>
+<span class="cmd">qm start</span> <span class="flag">&lt;vmid&gt;</span>
+
+<span class="comment"># Graceful shutdown — sends ACPI signal, OS shuts down cleanly</span>
+<span class="cmd">qm shutdown</span> <span class="flag">&lt;vmid&gt;</span>
+
+<span class="comment"># Force stop — equivalent to pulling the power plug</span>
+<span class="cmd">qm stop</span> <span class="flag">&lt;vmid&gt;</span>
+
+<span class="comment"># Graceful reboot</span>
+<span class="cmd">qm reboot</span> <span class="flag">&lt;vmid&gt;</span>
+
+<span class="comment"># Hard reset — like hitting the reset button, no ACPI</span>
+<span class="cmd">qm reset</span> <span class="flag">&lt;vmid&gt;</span></code></pre>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Command</th><th>Guest OS notified?</th><th>Use when</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>qm shutdown</code></td><td>Yes (ACPI)</td><td>Normal off — lets the OS flush disks and run shutdown hooks</td></tr>
+          <tr><td><code>qm stop</code></td><td>No</td><td>Guest is frozen or unresponsive; don't care about clean shutdown</td></tr>
+          <tr><td><code>qm reboot</code></td><td>Yes (ACPI)</td><td>Normal restart</td></tr>
+          <tr><td><code>qm reset</code></td><td>No</td><td>Hard restart when the guest won't respond to ACPI</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- STATUS -->
+  <section id="status">
+    <h2>Checking VM Status</h2>
+
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Single VM</span>
+<span class="cmd">qm status</span> <span class="flag">&lt;vmid&gt;</span>
+
+<span class="comment"># All VMs</span>
+<span class="cmd">qm list</span></code></pre>
+    </div>
+
+    <div class="code-block">
+      <pre><code><span class="cmd">qm status</span> 100
+<span class="out">status: running</span></code></pre>
+    </div>
+  </section>
+
+  <!-- CONFIG -->
+  <section id="config">
+    <h2>Viewing and Modifying Config</h2>
+
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="cmd">qm config</span> <span class="flag">&lt;vmid&gt;</span></code></pre>
+    </div>
+
+    <p>Sample output:</p>
+
+    <div class="code-block">
+      <pre><code><span class="out">agent: enabled=1,type=virtio
+boot: order=scsi0
+cores: 6
+machine: q35
+memory: 49152
+name: giraffe
+net0: virtio=BC:24:11:C1:2E:67,bridge=vmbr0
+serial0: socket
+vga: serial0</span></code></pre>
+    </div>
+
+    <h3>Modifying config with qm set</h3>
+
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Change memory (takes effect on next boot)</span>
+<span class="cmd">qm set</span> <span class="flag">&lt;vmid&gt;</span> <span class="flag">--memory</span> <span class="str">8192</span>
+
+<span class="comment"># Add serial port</span>
+<span class="cmd">qm set</span> <span class="flag">&lt;vmid&gt;</span> <span class="flag">--serial0</span> <span class="str">socket</span>
+
+<span class="comment"># Enable QEMU guest agent</span>
+<span class="cmd">qm set</span> <span class="flag">&lt;vmid&gt;</span> <span class="flag">--agent</span> <span class="str">enabled=1,type=virtio</span>
+
+<span class="comment"># Change core count</span>
+<span class="cmd">qm set</span> <span class="flag">&lt;vmid&gt;</span> <span class="flag">--cores</span> <span class="str">4</span>
+
+<span class="comment"># Set boot order</span>
+<span class="cmd">qm set</span> <span class="flag">&lt;vmid&gt;</span> <span class="flag">--boot</span> <span class="str">order=scsi0</span></code></pre>
+    </div>
+
+    <div class="banner info">
+      <div class="banner-icon">&#9432;</div>
+      <div class="banner-body">
+        <strong>Live vs. next boot</strong>
+        <p>Most <code>qm set</code> changes write to the config file and take effect on the next boot. A few (like memory balloon adjustments) can apply live if the guest supports it.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- AGENT -->
+  <section id="agent">
+    <h2>QEMU Guest Agent</h2>
+
+    <p>
+      The guest agent runs inside the VM and lets Proxmox communicate with it directly over a virtio-serial channel.
+      It enables IP reporting in the web UI, filesystem freeze before snapshots, and graceful shutdown when
+      the guest agent is present.
+    </p>
+
+    <h3>Check agent status from Proxmox</h3>
+
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Ping the agent — no output means success</span>
+<span class="cmd">qm agent</span> <span class="flag">&lt;vmid&gt;</span> ping
+
+<span class="comment"># Get IP addresses reported by the guest</span>
+<span class="cmd">qm agent</span> <span class="flag">&lt;vmid&gt;</span> network-get-interfaces
+
+<span class="comment"># Get agent version and capabilities</span>
+<span class="cmd">qm agent</span> <span class="flag">&lt;vmid&gt;</span> info</code></pre>
+    </div>
+
+    <h3>Enable in VM config</h3>
+
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="cmd">qm set</span> <span class="flag">&lt;vmid&gt;</span> <span class="flag">--agent</span> <span class="str">enabled=1,type=virtio</span></code></pre>
+    </div>
+
+    <h3>Install in guest (Ubuntu / Debian / Kali)</h3>
+
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code>sudo apt-get install -y qemu-guest-agent
+sudo systemctl start qemu-guest-agent</code></pre>
+    </div>
+
+    <div class="banner info">
+      <div class="banner-icon">&#9432;</div>
+      <div class="banner-body">
+        <strong>No systemctl enable needed</strong>
+        <p>The <code>qemu-guest-agent</code> unit file uses <code>BindsTo=</code> on the virtio-serial device. It starts automatically when the device appears at boot — enabling it manually produces a warning and has no effect.</p>
+      </div>
+    </div>
+
+    <div class="banner warning">
+      <div class="banner-icon">&#9888;</div>
+      <div class="banner-body">
+        <strong>Old shorthand: <code>agent: 1</code></strong>
+        <p>VMs created on older Proxmox versions may have <code>agent: 1</code> in their config. This doesn't specify <code>type=virtio</code> and Proxmox may not expose the virtio-serial channel. Update it explicitly: <code>qm set &lt;vmid&gt; --agent enabled=1,type=virtio</code></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- SNAPSHOTS -->
+  <section id="snapshots">
+    <h2>Snapshots</h2>
+
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Create a snapshot</span>
+<span class="cmd">qm snapshot</span> <span class="flag">&lt;vmid&gt;</span> <span class="str">&lt;name&gt;</span> <span class="flag">--description</span> <span class="str">"before upgrade"</span>
+
+<span class="comment"># List snapshots for a VM</span>
+<span class="cmd">qm listsnapshot</span> <span class="flag">&lt;vmid&gt;</span>
+
+<span class="comment"># Roll back to a snapshot</span>
+<span class="cmd">qm rollback</span> <span class="flag">&lt;vmid&gt;</span> <span class="str">&lt;name&gt;</span>
+
+<span class="comment"># Delete a snapshot</span>
+<span class="cmd">qm delsnapshot</span> <span class="flag">&lt;vmid&gt;</span> <span class="str">&lt;name&gt;</span></code></pre>
+    </div>
+
+    <div class="banner info">
+      <div class="banner-icon">&#9432;</div>
+      <div class="banner-body">
+        <strong>Guest agent improves snapshot consistency</strong>
+        <p>If the QEMU guest agent is running, Proxmox sends a filesystem freeze command before snapshotting and thaws after. Without the agent, the snapshot is crash-consistent — safe for most workloads but not ideal for databases with open transactions.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- CLONE -->
+  <section id="clone">
+    <h2>Cloning</h2>
+
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Full clone — independent copy, no dependency on the source</span>
+<span class="cmd">qm clone</span> <span class="flag">&lt;vmid&gt;</span> <span class="flag">&lt;new-vmid&gt;</span> <span class="flag">--name</span> <span class="str">&lt;new-name&gt;</span> <span class="flag">--full</span>
+
+<span class="comment"># Linked clone — shares base storage, much faster and smaller on disk</span>
+<span class="cmd">qm clone</span> <span class="flag">&lt;vmid&gt;</span> <span class="flag">&lt;new-vmid&gt;</span> <span class="flag">--name</span> <span class="str">&lt;new-name&gt;</span></code></pre>
+    </div>
+
+    <p>
+      Linked clones are useful for spinning up test VMs quickly from a template. Full clones are better
+      for long-lived VMs that shouldn't be affected if the source is modified or deleted.
+    </p>
+  </section>
+
+  <!-- EXEC -->
+  <section id="exec">
+    <h2>Running Commands via Guest Agent</h2>
+
+    <p>Run a command inside a VM without SSH, as long as the guest agent is running:</p>
+
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="cmd">qm guest exec</span> <span class="flag">&lt;vmid&gt;</span> -- <span class="str">&lt;command&gt;</span>
+
+<span class="comment"># Examples</span>
+<span class="cmd">qm guest exec</span> 100 -- uptime
+<span class="cmd">qm guest exec</span> 100 -- bash -c <span class="str">"df -h /"</span></code></pre>
+    </div>
+  </section>
+
+  <!-- QUICKREF -->
+  <section id="quickref">
+    <h2>Quick Reference</h2>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Task</th><th>Command</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>List all VMs</td><td><code>qm list</code></td></tr>
+          <tr><td>Open serial console</td><td><code>qm terminal &lt;vmid&gt;</code></td></tr>
+          <tr><td>Exit serial console</td><td><span class="kbd">Ctrl</span> + <span class="kbd">O</span></td></tr>
+          <tr><td>Start VM</td><td><code>qm start &lt;vmid&gt;</code></td></tr>
+          <tr><td>Graceful shutdown</td><td><code>qm shutdown &lt;vmid&gt;</code></td></tr>
+          <tr><td>Force stop</td><td><code>qm stop &lt;vmid&gt;</code></td></tr>
+          <tr><td>Reboot</td><td><code>qm reboot &lt;vmid&gt;</code></td></tr>
+          <tr><td>Hard reset</td><td><code>qm reset &lt;vmid&gt;</code></td></tr>
+          <tr><td>View config</td><td><code>qm config &lt;vmid&gt;</code></td></tr>
+          <tr><td>Modify config</td><td><code>qm set &lt;vmid&gt; --&lt;option&gt; &lt;value&gt;</code></td></tr>
+          <tr><td>Ping guest agent</td><td><code>qm agent &lt;vmid&gt; ping</code></td></tr>
+          <tr><td>Get IPs from guest</td><td><code>qm agent &lt;vmid&gt; network-get-interfaces</code></td></tr>
+          <tr><td>Create snapshot</td><td><code>qm snapshot &lt;vmid&gt; &lt;name&gt;</code></td></tr>
+          <tr><td>List snapshots</td><td><code>qm listsnapshot &lt;vmid&gt;</code></td></tr>
+          <tr><td>Roll back snapshot</td><td><code>qm rollback &lt;vmid&gt; &lt;name&gt;</code></td></tr>
+          <tr><td>Clone VM</td><td><code>qm clone &lt;vmid&gt; &lt;new-vmid&gt; --name &lt;name&gt; --full</code></td></tr>
+          <tr><td>Run command in guest</td><td><code>qm guest exec &lt;vmid&gt; -- &lt;command&gt;</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+</div>
+</div>
+
+<footer>
+  <p>
+    <a href="index.html">proxmox guides</a>
+    &nbsp;&middot;&nbsp;
+    <a href="https://github.com/davidwhittington/proxmox" target="_blank" rel="noopener">github.com/davidwhittington/proxmox</a>
+    &nbsp;&middot;&nbsp; 2026
+  </p>
+</footer>
+
+<script>
+  function copyCode(btn) {
+    const pre = btn.nextElementSibling;
+    navigator.clipboard.writeText(pre.innerText).then(() => {
+      btn.textContent = 'copied';
+      btn.classList.add('copied');
+      setTimeout(() => {
+        btn.textContent = 'copy';
+        btn.classList.remove('copied');
+      }, 1800);
+    });
+  }
+</script>
+</body>
+</html>
