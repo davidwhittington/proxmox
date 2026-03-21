@@ -360,22 +360,42 @@
 
   <a class="guide-card" href="qm-vm-management.html">
     <div class="guide-card-header">
-      <h2>qm VM Management</h2>
+      <h2>VM Management CLI Guide</h2>
       <span class="guide-card-badge">&#10003; Reference</span>
     </div>
     <p>
-      Managing Proxmox VMs from the command line — <code>qm list</code>, serial console via
-      <code>qm terminal</code>, start/stop/reboot, guest agent setup and verification, snapshots,
-      cloning, and live config changes with <code>qm set</code>. Includes the full setup procedure
-      for getting <code>qm terminal</code> working on a running VM.
+      Managing Proxmox QEMU/KVM VMs from the command line using <code>qm</code>. TL;DR cheat sheet
+      up top, then deep dives into serial console setup, guest agent, snapshots, and cloning.
+      Advanced section covers disk ops, cloud-init, migration, diagnostics, and the full command reference.
     </p>
     <div class="guide-card-tags">
       <span class="tag">qm</span>
       <span class="tag">qm terminal</span>
       <span class="tag">serial console</span>
       <span class="tag">qemu-guest-agent</span>
+      <span class="tag">disk ops</span>
+      <span class="tag">migration</span>
+    </div>
+  </a>
+
+  <a class="guide-card" href="pct-container-management.html">
+    <div class="guide-card-header">
+      <h2>Container Management CLI Guide</h2>
+      <span class="guide-card-badge">&#10003; Reference</span>
+    </div>
+    <p>
+      Managing Proxmox LXC containers from the command line using <code>pct</code>. Covers
+      <code>pct enter</code> for instant root shell access, start/stop, snapshots, cloning,
+      file transfer between host and container, and mounting a stopped container's filesystem
+      for recovery. Includes a containers vs. VMs comparison.
+    </p>
+    <div class="guide-card-tags">
+      <span class="tag">pct</span>
+      <span class="tag">lxc</span>
+      <span class="tag">pct enter</span>
+      <span class="tag">pct console</span>
       <span class="tag">snapshots</span>
-      <span class="tag">qm set</span>
+      <span class="tag">unprivileged</span>
     </div>
   </a>
 

@@ -3,15 +3,15 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>qm VM Management — Proxmox Command Line</title>
-  <meta name="description" content="How to manage Proxmox VMs from the command line using qm — listing VMs, serial console access, start/stop/reboot, guest agent, snapshots, and configuration." />
+  <title>VM Management CLI Guide — Proxmox (qm / QEMU-KVM)</title>
+  <meta name="description" content="Managing Proxmox QEMU/KVM virtual machines from the command line using qm — listing VMs, serial console access, start/stop/reboot, guest agent, snapshots, and configuration." />
   <meta name="robots" content="index, follow" />
   <meta property="og:type" content="article" />
-  <meta property="og:title" content="qm VM Management — Proxmox Command Line" />
-  <meta property="og:description" content="Managing Proxmox VMs from the command line: qm list, qm terminal, guest agent, snapshots, and configuration changes." />
+  <meta property="og:title" content="VM Management CLI Guide — Proxmox (qm / QEMU-KVM)" />
+  <meta property="og:description" content="Managing Proxmox QEMU/KVM VMs from the command line: qm list, qm terminal, guest agent, snapshots, and configuration changes." />
   <meta property="og:url" content="https://davidwhittington.github.io/proxmox/qm-vm-management.html" />
   <meta name="twitter:card" content="summary" />
-  <meta name="twitter:title" content="qm VM Management — Proxmox Command Line" />
+  <meta name="twitter:title" content="VM Management CLI Guide — Proxmox (qm / QEMU-KVM)" />
   <meta name="twitter:description" content="qm list, qm terminal, guest agent, snapshots, and VM config from the Proxmox shell." />
   <style>
     :root {
@@ -427,14 +427,15 @@
 
 <div class="hero">
   <div class="hero-badge">&#9881; Reference</div>
-  <h1>qm VM Management</h1>
+  <h1>VM Management CLI Guide</h1>
   <p class="hero-subtitle">
-    Managing Proxmox VMs from the command line. Listing, console access, start/stop,
-    guest agent, snapshots, and live config changes.
+    Managing Proxmox QEMU/KVM virtual machines from the command line using <code style="font-size:15px;background:rgba(88,166,255,0.1);border-color:rgba(88,166,255,0.3);color:var(--accent)">qm</code>.
+    Listing, console access, start/stop, guest agent, snapshots, and live config changes.
   </p>
   <div class="hero-meta">
     <span class="meta-tag">Proxmox VE 8+</span>
     <span class="meta-tag">qm</span>
+    <span class="meta-tag">QEMU / KVM</span>
     <span class="meta-tag">qemu-guest-agent</span>
     <span class="meta-tag">serial console</span>
   </div>
@@ -442,6 +443,41 @@
 
 <div class="container">
 <div class="content">
+
+  <div class="banner info">
+    <div class="banner-icon">&#128230;</div>
+    <div class="banner-body">
+      <strong>This guide covers QEMU/KVM virtual machines</strong>
+      <p><code>qm</code> manages full virtual machines running under QEMU/KVM. For LXC containers, see the <a href="pct-container-management.html" style="color:var(--accent)">Container Management CLI Guide</a> (<code>pct</code>).</p>
+    </div>
+  </div>
+
+  <!-- TL;DR -->
+  <section id="tldr">
+    <h2>TL;DR — The Commands You Actually Use Every Day</h2>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>What you want to do</th><th>Command</th></tr></thead>
+        <tbody>
+          <tr><td>See all VMs and their status</td><td><code>qm list</code></td></tr>
+          <tr><td>Open a console on a VM (no SSH needed)</td><td><code>qm terminal &lt;vmid&gt;</code> — exit with <span class="kbd">Ctrl</span>+<span class="kbd">O</span></td></tr>
+          <tr><td>Start a stopped VM</td><td><code>qm start &lt;vmid&gt;</code></td></tr>
+          <tr><td>Cleanly shut down a VM</td><td><code>qm shutdown &lt;vmid&gt;</code></td></tr>
+          <tr><td>Kill a VM that won't respond</td><td><code>qm stop &lt;vmid&gt;</code></td></tr>
+          <tr><td>Reboot a VM</td><td><code>qm reboot &lt;vmid&gt;</code></td></tr>
+          <tr><td>See a VM's config</td><td><code>qm config &lt;vmid&gt;</code></td></tr>
+          <tr><td>Change a setting</td><td><code>qm set &lt;vmid&gt; --memory 4096</code></td></tr>
+          <tr><td>Verify guest agent is talking</td><td><code>qm agent &lt;vmid&gt; ping</code></td></tr>
+          <tr><td>Take a snapshot before changes</td><td><code>qm snapshot &lt;vmid&gt; pre-upgrade</code></td></tr>
+          <tr><td>Roll back a snapshot</td><td><code>qm rollback &lt;vmid&gt; pre-upgrade</code></td></tr>
+          <tr><td>Run a command in the guest</td><td><code>qm guest exec &lt;vmid&gt; -- uptime</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p style="color:var(--muted);font-size:14px">That covers 90% of day-to-day use. The sections below go deeper on each topic, and the <a href="#advanced" style="color:var(--accent)">Advanced Operations</a> section covers disk management, cloud-init, migration, diagnostics, and the full command reference.</p>
+  </section>
 
   <div class="toc">
     <h3>Contents</h3>
@@ -456,6 +492,18 @@
       <li><a href="#snapshots">Snapshots</a></li>
       <li><a href="#clone">Cloning</a></li>
       <li><a href="#exec">Running Commands via Guest Agent</a></li>
+      <li><a href="#sendkey">Sending Keystrokes — qm sendkey</a></li>
+      <li><a href="#advanced">Advanced Operations</a>
+        <ol style="margin-top:4px">
+          <li><a href="#adv-disk">Disk Operations</a></li>
+          <li><a href="#adv-cloudinit">Cloud-init Management</a></li>
+          <li><a href="#adv-lifecycle">VM Lifecycle</a></li>
+          <li><a href="#adv-migrate">Migration</a></li>
+          <li><a href="#adv-diag">Diagnostics &amp; Recovery</a></li>
+          <li><a href="#adv-import">Importing VMs</a></li>
+          <li><a href="#adv-cmdref">Full Command Reference</a></li>
+        </ol>
+      </li>
       <li><a href="#quickref">Quick Reference</a></li>
     </ol>
   </div>
@@ -843,6 +891,343 @@ sudo systemctl start qemu-guest-agent</code></pre>
     </div>
   </section>
 
+  <!-- SENDKEY -->
+  <section id="sendkey">
+    <h2>Sending Keystrokes — qm sendkey</h2>
+
+    <p>
+      <code>qm sendkey</code> injects a keypress directly into a running VM — useful when the VM
+      is not responding to ACPI signals, or when you need to interact with something at the console
+      (BIOS, bootloader, a locked screen) without being physically present.
+    </p>
+
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="cmd">qm sendkey</span> <span class="flag">&lt;vmid&gt;</span> <span class="str">&lt;key&gt;</span></code></pre>
+    </div>
+
+    <h3>Common examples</h3>
+
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Send Ctrl+Alt+Delete (reboot or unlock screen depending on OS)</span>
+<span class="cmd">qm sendkey</span> 100 <span class="str">ctrl-alt-delete</span>
+
+<span class="comment"># Press Enter (confirm a prompt, advance through a bootloader menu)</span>
+<span class="cmd">qm sendkey</span> 100 <span class="str">ret</span>
+
+<span class="comment"># Send Escape (exit a menu, cancel a dialog)</span>
+<span class="cmd">qm sendkey</span> 100 <span class="str">esc</span>
+
+<span class="comment"># Send a single character</span>
+<span class="cmd">qm sendkey</span> 100 <span class="str">y</span></code></pre>
+    </div>
+
+    <div class="banner info">
+      <div class="banner-icon">&#9432;</div>
+      <div class="banner-body">
+        <strong>Key names follow QEMU conventions</strong>
+        <p>Keys are named using QEMU's keymap strings: <code>ret</code> for Enter, <code>esc</code> for Escape, <code>spc</code> for Space, <code>ctrl-alt-delete</code>, <code>ctrl-c</code>, <code>shift-a</code>, etc. Run <code>qm sendkey --help</code> for the full list.</p>
+      </div>
+    </div>
+
+    <p>
+      This is particularly useful when a VM has a hung console that won't respond to normal input,
+      or when you need to interact with a GRUB menu or BIOS setup screen remotely without opening
+      the noVNC viewer.
+    </p>
+  </section>
+
+  <!-- ADVANCED -->
+  <section id="advanced">
+    <h2>Advanced Operations</h2>
+    <p style="color:var(--muted)">Less common commands for disk management, cloud-init, migrations, diagnostics, and VM import. If you found what you needed above, you can stop here.</p>
+  </section>
+
+  <!-- ADV: DISK -->
+  <section id="adv-disk">
+    <h2>Disk Operations</h2>
+
+    <h3>Resize a disk</h3>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Grow disk by 20GB (use +size to grow, bare size to set absolute)</span>
+<span class="cmd">qm disk resize</span> <span class="flag">&lt;vmid&gt;</span> <span class="str">scsi0</span> <span class="flag">+20G</span>
+
+<span class="comment"># After resizing the Proxmox disk, extend the partition inside the guest too</span>
+<span class="comment"># (usually via growpart / resize2fs / lvextend depending on the OS)</span></code></pre>
+    </div>
+
+    <h3>Move a disk to different storage</h3>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Move scsi0 from local-lvm to a different storage pool</span>
+<span class="cmd">qm disk move</span> <span class="flag">&lt;vmid&gt;</span> <span class="str">scsi0</span> <span class="str">ceph-pool</span> <span class="flag">--delete</span></code></pre>
+    </div>
+
+    <h3>Import an existing disk image</h3>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Import a qcow2/raw/vmdk image as a new disk for a VM</span>
+<span class="cmd">qm disk import</span> <span class="flag">&lt;vmid&gt;</span> <span class="str">/path/to/disk.qcow2</span> <span class="str">local-lvm</span></code></pre>
+    </div>
+
+    <h3>Detach / remove a disk</h3>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Unlink (detach) a disk — use --purge to also delete the storage volume</span>
+<span class="cmd">qm disk unlink</span> <span class="flag">&lt;vmid&gt;</span> <span class="flag">--idlist</span> <span class="str">scsi1</span>
+<span class="cmd">qm disk unlink</span> <span class="flag">&lt;vmid&gt;</span> <span class="flag">--idlist</span> <span class="str">scsi1</span> <span class="flag">--purge</span></code></pre>
+    </div>
+
+    <h3>Rescan storage</h3>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Force Proxmox to rescan and detect disk changes</span>
+<span class="cmd">qm disk rescan</span></code></pre>
+    </div>
+  </section>
+
+  <!-- ADV: CLOUDINIT -->
+  <section id="adv-cloudinit">
+    <h2>Cloud-init Management</h2>
+
+    <p>For VMs provisioned with cloud-init (user, SSH keys, network injected at first boot).</p>
+
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Show the rendered cloud-init config that will be injected (user/network/meta)</span>
+<span class="cmd">qm cloudinit dump</span> <span class="flag">&lt;vmid&gt;</span> <span class="str">user</span>
+<span class="cmd">qm cloudinit dump</span> <span class="flag">&lt;vmid&gt;</span> <span class="str">network</span>
+
+<span class="comment"># Show pending cloud-init changes not yet applied to the ISO</span>
+<span class="cmd">qm cloudinit pending</span> <span class="flag">&lt;vmid&gt;</span>
+
+<span class="comment"># Regenerate the cloud-init ISO after config changes</span>
+<span class="cmd">qm cloudinit update</span> <span class="flag">&lt;vmid&gt;</span></code></pre>
+    </div>
+
+    <div class="banner info">
+      <div class="banner-icon">&#9432;</div>
+      <div class="banner-body">
+        <strong>When to use qm cloudinit update</strong>
+        <p>If you change <code>--ciuser</code>, <code>--sshkeys</code>, or network settings on a cloud-init VM via <code>qm set</code>, run <code>qm cloudinit update</code> to regenerate the ISO before the next boot — otherwise the old values are still on the drive.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ADV: LIFECYCLE -->
+  <section id="adv-lifecycle">
+    <h2>VM Lifecycle</h2>
+
+    <h3>Suspend and resume</h3>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Suspend VM to disk (saves RAM state)</span>
+<span class="cmd">qm suspend</span> <span class="flag">&lt;vmid&gt;</span>
+
+<span class="comment"># Resume a suspended VM</span>
+<span class="cmd">qm resume</span> <span class="flag">&lt;vmid&gt;</span></code></pre>
+    </div>
+
+    <h3>Convert a VM to a template</h3>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Convert a stopped VM into a template (irreversible — clone it first if unsure)</span>
+<span class="cmd">qm template</span> <span class="flag">&lt;vmid&gt;</span></code></pre>
+    </div>
+
+    <p>Templates can't be started directly — they're designed to be cloned. This is the standard
+    way to create a golden image in Proxmox: provision a VM, configure it, then convert to template.</p>
+
+    <h3>Destroy a VM</h3>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Delete a VM and all its disks (VM must be stopped)</span>
+<span class="cmd">qm destroy</span> <span class="flag">&lt;vmid&gt;</span>
+
+<span class="comment"># Also purge from jobs and replication config</span>
+<span class="cmd">qm destroy</span> <span class="flag">&lt;vmid&gt;</span> <span class="flag">--purge</span></code></pre>
+    </div>
+
+    <h3>View pending config changes</h3>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Show config changes that have been set but require a reboot to take effect</span>
+<span class="cmd">qm pending</span> <span class="flag">&lt;vmid&gt;</span></code></pre>
+    </div>
+
+    <h3>Set a guest password via agent</h3>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Change a user's password inside the guest (requires guest agent)</span>
+<span class="cmd">qm guest passwd</span> <span class="flag">&lt;vmid&gt;</span> <span class="str">&lt;username&gt;</span></code></pre>
+    </div>
+  </section>
+
+  <!-- ADV: MIGRATE -->
+  <section id="adv-migrate">
+    <h2>Migration</h2>
+
+    <h3>Live migrate to another node (same cluster)</h3>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Live migrate a running VM to another cluster node</span>
+<span class="cmd">qm migrate</span> <span class="flag">&lt;vmid&gt;</span> <span class="str">&lt;target-node&gt;</span>
+
+<span class="comment"># Force offline migration (VM will be stopped)</span>
+<span class="cmd">qm migrate</span> <span class="flag">&lt;vmid&gt;</span> <span class="str">&lt;target-node&gt;</span> <span class="flag">--online</span> <span class="str">0</span>
+
+<span class="comment"># Migrate with storage mapping (if storage names differ between nodes)</span>
+<span class="cmd">qm migrate</span> <span class="flag">&lt;vmid&gt;</span> <span class="str">&lt;target-node&gt;</span> <span class="flag">--targetstorage</span> <span class="str">local-lvm</span></code></pre>
+    </div>
+
+    <h3>Remote migrate (different Proxmox cluster)</h3>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Migrate a VM to a completely separate Proxmox cluster</span>
+<span class="cmd">qm remote-migrate</span> <span class="flag">&lt;vmid&gt;</span> <span class="str">[&lt;target-vmid&gt;]</span> <span class="str">&lt;target-endpoint&gt;</span> \
+  <span class="flag">--target-bridge</span> <span class="str">vmbr0</span> \
+  <span class="flag">--target-storage</span> <span class="str">local-lvm</span></code></pre>
+    </div>
+  </section>
+
+  <!-- ADV: DIAG -->
+  <section id="adv-diag">
+    <h2>Diagnostics &amp; Recovery</h2>
+
+    <h3>Show the QEMU command line</h3>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Print the exact qemu-system-x86_64 command Proxmox would use to start the VM</span>
+<span class="cmd">qm showcmd</span> <span class="flag">&lt;vmid&gt;</span></code></pre>
+    </div>
+    <p>Useful for debugging passthrough flags, verifying machine type, or understanding exactly how a VM is configured at the QEMU level.</p>
+
+    <h3>QMP monitor</h3>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Open a QEMU Machine Protocol (QMP) monitor session for a running VM</span>
+<span class="cmd">qm monitor</span> <span class="flag">&lt;vmid&gt;</span></code></pre>
+    </div>
+    <p>The QMP monitor is a low-level JSON protocol interface directly into the running QEMU process. You can query device state, eject media, trigger savevm, and more. Type <code>help</code> inside the monitor for available commands.</p>
+
+    <h3>Unlock a stuck VM</h3>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Remove a stuck lock on a VM (e.g., after a failed migration or snapshot)</span>
+<span class="cmd">qm unlock</span> <span class="flag">&lt;vmid&gt;</span></code></pre>
+    </div>
+    <p>VMs can get stuck in a locked state after a failed migration, snapshot, or backup. This clears the lock so you can manage the VM again. Use only when you're sure no operation is actually in progress.</p>
+
+    <h3>Wait for a VM to reach a specific state</h3>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Block until the VM reaches 'stopped' or 'running' — useful in scripts</span>
+<span class="cmd">qm wait</span> <span class="flag">&lt;vmid&gt;</span> <span class="flag">--timeout</span> <span class="str">60</span></code></pre>
+    </div>
+
+    <h3>Check async guest exec status</h3>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Check the result of a previously started qm guest exec command</span>
+<span class="cmd">qm guest exec-status</span> <span class="flag">&lt;vmid&gt;</span> <span class="str">&lt;pid&gt;</span></code></pre>
+    </div>
+  </section>
+
+  <!-- ADV: IMPORT -->
+  <section id="adv-import">
+    <h2>Importing VMs</h2>
+
+    <h3>Import a disk image</h3>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Import a raw/qcow2/vmdk disk to Proxmox storage, attach later with qm set</span>
+<span class="cmd">qm import</span> <span class="flag">&lt;vmid&gt;</span> <span class="str">/path/to/disk.img</span> <span class="flag">--storage</span> <span class="str">local-lvm</span></code></pre>
+    </div>
+
+    <h3>Import an OVF / OVA appliance</h3>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Import a VM exported as OVF/OVA (from VMware, VirtualBox, etc.)</span>
+<span class="cmd">qm importovf</span> <span class="flag">&lt;vmid&gt;</span> <span class="str">/path/to/vm.ovf</span> <span class="str">local-lvm</span>
+
+<span class="comment"># For a .ova file, extract it first:</span>
+tar -xf vm.ova
+<span class="cmd">qm importovf</span> <span class="flag">&lt;vmid&gt;</span> <span class="str">vm.ovf</span> <span class="str">local-lvm</span></code></pre>
+    </div>
+
+    <h3>Enroll Secure Boot EFI keys</h3>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Enroll Microsoft/default Secure Boot keys into the VM's EFI store</span>
+<span class="cmd">qm enroll-efi-keys</span> <span class="flag">&lt;vmid&gt;</span></code></pre>
+    </div>
+    <p>Required when setting up a new UEFI VM with Secure Boot enabled. Enrolls the standard Microsoft
+    and distro-vendor keys so a signed bootloader (shim, GRUB) will be accepted.</p>
+  </section>
+
+  <!-- ADV: CMDREF -->
+  <section id="adv-cmdref">
+    <h2>Full Command Reference</h2>
+    <p style="color:var(--muted);margin-bottom:16px">Every <code>qm</code> subcommand, in one place.</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td><code>qm list</code></td><td>List all VMs and their status</td></tr>
+          <tr><td><code>qm status &lt;vmid&gt;</code></td><td>Show status of a single VM</td></tr>
+          <tr><td><code>qm start &lt;vmid&gt;</code></td><td>Start a stopped VM</td></tr>
+          <tr><td><code>qm shutdown &lt;vmid&gt;</code></td><td>Graceful shutdown via ACPI</td></tr>
+          <tr><td><code>qm stop &lt;vmid&gt;</code></td><td>Force stop (power cut)</td></tr>
+          <tr><td><code>qm reboot &lt;vmid&gt;</code></td><td>Graceful reboot via ACPI</td></tr>
+          <tr><td><code>qm reset &lt;vmid&gt;</code></td><td>Hard reset (no ACPI)</td></tr>
+          <tr><td><code>qm suspend &lt;vmid&gt;</code></td><td>Suspend VM to disk</td></tr>
+          <tr><td><code>qm resume &lt;vmid&gt;</code></td><td>Resume a suspended VM</td></tr>
+          <tr><td><code>qm terminal &lt;vmid&gt;</code></td><td>Open serial console (exit: Ctrl+O)</td></tr>
+          <tr><td><code>qm sendkey &lt;vmid&gt; &lt;key&gt;</code></td><td>Inject a keypress into the VM</td></tr>
+          <tr><td><code>qm monitor &lt;vmid&gt;</code></td><td>Open raw QMP monitor session</td></tr>
+          <tr><td><code>qm config &lt;vmid&gt;</code></td><td>Show VM configuration</td></tr>
+          <tr><td><code>qm set &lt;vmid&gt; [OPTIONS]</code></td><td>Modify VM configuration</td></tr>
+          <tr><td><code>qm pending &lt;vmid&gt;</code></td><td>Show config changes pending a reboot</td></tr>
+          <tr><td><code>qm showcmd &lt;vmid&gt;</code></td><td>Print the raw QEMU command line</td></tr>
+          <tr><td><code>qm snapshot &lt;vmid&gt; &lt;name&gt;</code></td><td>Create a snapshot</td></tr>
+          <tr><td><code>qm listsnapshot &lt;vmid&gt;</code></td><td>List all snapshots</td></tr>
+          <tr><td><code>qm rollback &lt;vmid&gt; &lt;name&gt;</code></td><td>Roll back to a snapshot</td></tr>
+          <tr><td><code>qm delsnapshot &lt;vmid&gt; &lt;name&gt;</code></td><td>Delete a snapshot</td></tr>
+          <tr><td><code>qm clone &lt;vmid&gt; &lt;newid&gt;</code></td><td>Clone a VM</td></tr>
+          <tr><td><code>qm create &lt;vmid&gt;</code></td><td>Create a new VM</td></tr>
+          <tr><td><code>qm destroy &lt;vmid&gt;</code></td><td>Delete a VM and its disks</td></tr>
+          <tr><td><code>qm template &lt;vmid&gt;</code></td><td>Convert VM to template</td></tr>
+          <tr><td><code>qm migrate &lt;vmid&gt; &lt;node&gt;</code></td><td>Migrate to another cluster node</td></tr>
+          <tr><td><code>qm remote-migrate &lt;vmid&gt; ...</code></td><td>Migrate to a different Proxmox cluster</td></tr>
+          <tr><td><code>qm unlock &lt;vmid&gt;</code></td><td>Remove a stuck lock</td></tr>
+          <tr><td><code>qm wait &lt;vmid&gt;</code></td><td>Block until VM reaches a state (for scripts)</td></tr>
+          <tr><td><code>qm disk resize &lt;vmid&gt; &lt;disk&gt; &lt;size&gt;</code></td><td>Grow or shrink a disk</td></tr>
+          <tr><td><code>qm disk move &lt;vmid&gt; &lt;disk&gt; &lt;storage&gt;</code></td><td>Move disk to different storage</td></tr>
+          <tr><td><code>qm disk import &lt;vmid&gt; &lt;source&gt; &lt;storage&gt;</code></td><td>Import a disk image file</td></tr>
+          <tr><td><code>qm disk unlink &lt;vmid&gt; --idlist &lt;disk&gt;</code></td><td>Detach/delete a disk</td></tr>
+          <tr><td><code>qm disk rescan</code></td><td>Force rescan of storage volumes</td></tr>
+          <tr><td><code>qm cloudinit dump &lt;vmid&gt; &lt;type&gt;</code></td><td>Show rendered cloud-init config</td></tr>
+          <tr><td><code>qm cloudinit pending &lt;vmid&gt;</code></td><td>Show pending cloud-init changes</td></tr>
+          <tr><td><code>qm cloudinit update &lt;vmid&gt;</code></td><td>Regenerate the cloud-init ISO</td></tr>
+          <tr><td><code>qm guest exec &lt;vmid&gt; -- &lt;cmd&gt;</code></td><td>Run a command via guest agent</td></tr>
+          <tr><td><code>qm guest exec-status &lt;vmid&gt; &lt;pid&gt;</code></td><td>Check status of async guest exec</td></tr>
+          <tr><td><code>qm guest passwd &lt;vmid&gt; &lt;user&gt;</code></td><td>Set a guest user password via agent</td></tr>
+          <tr><td><code>qm import &lt;vmid&gt; &lt;source&gt;</code></td><td>Import a disk image to storage</td></tr>
+          <tr><td><code>qm importovf &lt;vmid&gt; &lt;manifest&gt; &lt;storage&gt;</code></td><td>Import OVF/OVA from VMware/VirtualBox</td></tr>
+          <tr><td><code>qm enroll-efi-keys &lt;vmid&gt;</code></td><td>Enroll Secure Boot EFI keys</td></tr>
+          <tr><td><code>qm cleanup &lt;vmid&gt; ...</code></td><td>Clean up after a failed operation</td></tr>
+          <tr><td><code>qm vncproxy &lt;vmid&gt;</code></td><td>Start a VNC proxy for web console</td></tr>
+          <tr><td><code>qm nbdstop &lt;vmid&gt;</code></td><td>Stop an NBD server started for disk access</td></tr>
+          <tr><td><code>qm mtunnel</code></td><td>Internal migration tunnel (used by Proxmox internals)</td></tr>
+          <tr><td><code>qm help</code></td><td>Show help for a command</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
   <!-- QUICKREF -->
   <section id="quickref">
     <h2>Quick Reference</h2>
@@ -870,6 +1255,7 @@ sudo systemctl start qemu-guest-agent</code></pre>
           <tr><td>Roll back snapshot</td><td><code>qm rollback &lt;vmid&gt; &lt;name&gt;</code></td></tr>
           <tr><td>Clone VM</td><td><code>qm clone &lt;vmid&gt; &lt;new-vmid&gt; --name &lt;name&gt; --full</code></td></tr>
           <tr><td>Run command in guest</td><td><code>qm guest exec &lt;vmid&gt; -- &lt;command&gt;</code></td></tr>
+          <tr><td>Send keystrokes to VM</td><td><code>qm sendkey &lt;vmid&gt; &lt;key&gt;</code></td></tr>
         </tbody>
       </table>
     </div>

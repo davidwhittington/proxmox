@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Container Management CLI Guide — Proxmox (pct / LXC)</title>
+  <meta name="description" content="Managing Proxmox LXC containers from the command line using pct — listing, console access, start/stop, file transfer, snapshots, cloning, and configuration." />
+  <meta name="robots" content="index, follow" />
+  <meta property="og:type" content="article" />
+  <meta property="og:title" content="Container Management CLI Guide — Proxmox (pct / LXC)" />
+  <meta property="og:description" content="Managing Proxmox LXC containers from the command line: pct list, pct enter, snapshots, cloning, file transfer, and config." />
+  <meta property="og:url" content="https://davidwhittington.github.io/proxmox/pct-container-management.html" />
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="Container Management CLI Guide — Proxmox (pct / LXC)" />
+  <meta name="twitter:description" content="pct list, pct enter, snapshots, cloning, and container config from the Proxmox shell." />
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --accent: #58a6ff;
+      --green: #3fb950;
+      --orange: #d29922;
+      --red: #f85149;
+      --purple: #bc8cff;
+      --code-bg: #1f2937;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      font-size: 15px;
+      line-height: 1.7;
+    }
+
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 24px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .nav-brand {
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 14px;
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 24px;
+      list-style: none;
+    }
+
+    .nav-links a {
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 14px;
+      transition: color 0.15s;
+    }
+
+    .nav-links a:hover { color: var(--text); }
+
+    .hero {
+      text-align: center;
+      padding: 72px 24px 56px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(188,140,255,0.1);
+      border: 1px solid rgba(188,140,255,0.3);
+      border-radius: 20px;
+      padding: 4px 14px;
+      font-size: 12px;
+      font-family: "SF Mono", "Fira Code", monospace;
+      color: var(--purple);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      margin-bottom: 20px;
+    }
+
+    .hero h1 {
+      font-size: clamp(24px, 4vw, 38px);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 16px;
+      line-height: 1.2;
+    }
+
+    .hero-subtitle {
+      color: var(--muted);
+      font-size: 16px;
+      max-width: 660px;
+      margin: 0 auto 28px;
+    }
+
+    .hero-meta {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .meta-tag {
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 12px;
+      color: var(--muted);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 4px 10px;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    .content { padding: 48px 0 80px; }
+
+    section { margin-bottom: 64px; }
+
+    section h2 {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 20px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .phase-num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      background: rgba(188,140,255,0.12);
+      border: 1px solid rgba(188,140,255,0.3);
+      border-radius: 50%;
+      font-size: 12px;
+      font-family: "SF Mono", "Fira Code", monospace;
+      color: var(--purple);
+      flex-shrink: 0;
+    }
+
+    section h3 {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text);
+      margin: 28px 0 12px;
+    }
+
+    p { color: var(--text); margin-bottom: 14px; }
+    p:last-child { margin-bottom: 0; }
+
+    ul, ol { padding-left: 22px; margin-bottom: 16px; }
+    li { margin-bottom: 6px; font-size: 15px; color: var(--text); }
+    li code { font-size: 13px; }
+
+    .banner {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      padding: 16px 20px;
+      border-radius: 8px;
+      margin: 20px 0;
+      border: 1px solid;
+    }
+
+    .banner-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+    .banner-body { flex: 1; }
+
+    .banner-body strong {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 4px;
+      font-size: 14px;
+    }
+
+    .banner-body p { font-size: 14px; margin: 0; line-height: 1.6; }
+
+    .banner.info { background: rgba(88,166,255,0.08); border-color: rgba(88,166,255,0.3); }
+    .banner.info .banner-body strong { color: var(--accent); }
+
+    .banner.warning { background: rgba(210,153,34,0.08); border-color: rgba(210,153,34,0.35); }
+    .banner.warning .banner-body strong { color: var(--orange); }
+
+    .banner.success { background: rgba(63,185,80,0.08); border-color: rgba(63,185,80,0.35); }
+    .banner.success .banner-body strong { color: var(--green); }
+
+    .banner.purple { background: rgba(188,140,255,0.08); border-color: rgba(188,140,255,0.3); }
+    .banner.purple .banner-body strong { color: var(--purple); }
+
+    .code-block { position: relative; margin: 16px 0; }
+
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 18px 20px;
+      overflow-x: auto;
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    code {
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 13px;
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 2px 6px;
+      color: var(--text);
+    }
+
+    pre code { background: none; border: none; padding: 0; font-size: inherit; }
+
+    .copy-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--muted);
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 11px;
+      padding: 4px 10px;
+      cursor: pointer;
+      transition: color 0.15s, border-color 0.15s;
+    }
+
+    .copy-btn:hover { color: var(--text); border-color: var(--muted); }
+    .copy-btn.copied { color: var(--green); border-color: var(--green); }
+
+    .comment { color: #6e7681; font-style: italic; }
+    .flag { color: #d2a8ff; }
+    .str { color: #a5d6ff; }
+    .cmd { color: #79c0ff; }
+    .kw { color: #ff7b72; }
+    .out { color: #8b949e; }
+
+    .table-wrap {
+      overflow-x: auto;
+      margin: 16px 0;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+
+    thead th {
+      background: var(--surface);
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 10px 16px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+
+    tbody td { padding: 10px 16px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    tbody td code { white-space: nowrap; }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:nth-child(even) { background: rgba(255,255,255,0.015); }
+
+    .toc {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px 24px;
+      margin-bottom: 48px;
+    }
+
+    .toc h3 {
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin: 0 0 12px;
+    }
+
+    .toc ol { padding-left: 20px; margin: 0; }
+    .toc li { margin-bottom: 4px; font-size: 14px; }
+    .toc a { color: var(--accent); text-decoration: none; }
+    .toc a:hover { text-decoration: underline; }
+
+    .kbd {
+      display: inline-block;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-bottom-width: 2px;
+      border-radius: 4px;
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 12px;
+      color: var(--text);
+      padding: 2px 7px;
+      line-height: 1.5;
+    }
+
+    .compare-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin: 20px 0;
+    }
+
+    .compare-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 18px 20px;
+    }
+
+    .compare-card h4 {
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 10px;
+    }
+
+    .compare-card.vm h4 { color: var(--accent); }
+    .compare-card.ct h4 { color: var(--purple); }
+
+    .compare-card ul { margin: 0; padding-left: 18px; }
+    .compare-card li { font-size: 13px; margin-bottom: 4px; color: var(--muted); }
+
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 24px 32px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    footer a { color: var(--muted); text-decoration: none; }
+    footer a:hover { color: var(--text); }
+
+    @media (max-width: 600px) {
+      .hero { padding: 48px 16px 40px; }
+      .content { padding: 32px 0 60px; }
+      nav { padding: 0 16px; }
+      .compare-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-brand" href="index.html">proxmox</a>
+  <ul class="nav-links">
+    <li><a href="index.html">Guides</a></li>
+    <li><a href="https://github.com/davidwhittington/proxmox" target="_blank" rel="noopener">GitHub</a></li>
+  </ul>
+</nav>
+
+<div class="hero">
+  <div class="hero-badge">&#9881; Reference</div>
+  <h1>Container Management CLI Guide</h1>
+  <p class="hero-subtitle">
+    Managing Proxmox LXC containers from the command line using
+    <code style="font-size:15px;background:rgba(188,140,255,0.1);border-color:rgba(188,140,255,0.3);color:var(--purple)">pct</code>.
+    Console access, start/stop, file transfer, snapshots, and live config.
+  </p>
+  <div class="hero-meta">
+    <span class="meta-tag">Proxmox VE 8+</span>
+    <span class="meta-tag">pct</span>
+    <span class="meta-tag">LXC</span>
+    <span class="meta-tag">unprivileged containers</span>
+  </div>
+</div>
+
+<div class="container">
+<div class="content">
+
+  <div class="toc">
+    <h3>Contents</h3>
+    <ol>
+      <li><a href="#vs-vms">Containers vs. VMs</a></li>
+      <li><a href="#list">Listing Containers</a></li>
+      <li><a href="#enter">Entering a Container</a></li>
+      <li><a href="#power">Starting, Stopping, Restarting</a></li>
+      <li><a href="#status">Checking Status</a></li>
+      <li><a href="#config">Viewing and Modifying Config</a></li>
+      <li><a href="#create">Creating a Container</a></li>
+      <li><a href="#snapshots">Snapshots</a></li>
+      <li><a href="#clone">Cloning</a></li>
+      <li><a href="#exec">Running Commands</a></li>
+      <li><a href="#files">File Transfer</a></li>
+      <li><a href="#mount">Mounting the Filesystem</a></li>
+      <li><a href="#templates">Templates</a></li>
+      <li><a href="#quickref">Quick Reference</a></li>
+    </ol>
+  </div>
+
+  <div class="banner info">
+    <div class="banner-icon">&#128230;</div>
+    <div class="banner-body">
+      <strong>This guide covers LXC containers</strong>
+      <p><code>pct</code> manages Linux containers that share the host kernel. For full QEMU/KVM virtual machines, see the <a href="qm-vm-management.html" style="color:var(--accent)">VM Management CLI Guide</a> (<code>qm</code>).</p>
+    </div>
+  </div>
+
+  <!-- VS VMS -->
+  <section id="vs-vms">
+    <h2>Containers vs. VMs</h2>
+
+    <div class="compare-grid">
+      <div class="compare-card ct">
+        <h4>LXC Container (pct)</h4>
+        <ul>
+          <li>Shares the host Linux kernel</li>
+          <li>Near-native performance</li>
+          <li>Starts in under a second</li>
+          <li>Smaller footprint — no guest kernel overhead</li>
+          <li>Linux only</li>
+          <li>No GPU passthrough</li>
+        </ul>
+      </div>
+      <div class="compare-card vm">
+        <h4>QEMU/KVM VM (qm)</h4>
+        <ul>
+          <li>Full hardware emulation, own kernel</li>
+          <li>Runs any OS (Linux, Windows, BSD)</li>
+          <li>Stronger isolation</li>
+          <li>GPU passthrough supported</li>
+          <li>Slower to start, more RAM overhead</li>
+          <li>Guest agent needed for host integration</li>
+        </ul>
+      </div>
+    </div>
+
+    <p>Containers are the right choice for Linux services, network utilities, and anything where
+    you want density and speed. VMs are the right choice when you need a different OS, a full
+    kernel, hardware passthrough, or the strongest isolation.</p>
+  </section>
+
+  <!-- LIST -->
+  <section id="list">
+    <h2>Listing Containers</h2>
+
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="cmd">pct list</span></code></pre>
+    </div>
+
+    <p>Sample output:</p>
+
+    <div class="code-block">
+      <pre><code><span class="out">VMID       Status     Lock         Name
+ 201        running                 zebra
+ 305        stopped                 meerkat
+ 901        running                 warthog
+ 911        running                 lemur</span></code></pre>
+    </div>
+
+    <p>The <code>VMID</code> column is used in all <code>pct</code> commands, same numbering space as VMs.</p>
+  </section>
+
+  <!-- ENTER -->
+  <section id="enter">
+    <h2>Entering a Container</h2>
+
+    <p>The primary way to get a shell inside a running container:</p>
+
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="cmd">pct enter</span> <span class="flag">&lt;ctid&gt;</span></code></pre>
+    </div>
+
+    <p>This drops you directly into the container's root namespace — no password, no SSH required.
+    You get a root shell immediately.</p>
+
+    <div class="code-block">
+      <pre><code><span class="cmd">pct enter</span> 201
+<span class="out">root@zebra:~#</span></code></pre>
+    </div>
+
+    <div class="banner info">
+      <div class="banner-icon">&#9432;</div>
+      <div class="banner-body">
+        <strong>To exit</strong>
+        <p>Type <code>exit</code> or press <span class="kbd">Ctrl</span> + <span class="kbd">D</span></p>
+      </div>
+    </div>
+
+    <h3>Console access (with login prompt)</h3>
+
+    <p>For a proper console session that presents a getty login:</p>
+
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="cmd">pct console</span> <span class="flag">&lt;ctid&gt;</span></code></pre>
+    </div>
+
+    <div class="banner info">
+      <div class="banner-icon">&#9432;</div>
+      <div class="banner-body">
+        <strong>To exit pct console</strong>
+        <p>Press <span class="kbd">Ctrl</span> + <span class="kbd">A</span> then <span class="kbd">q</span></p>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Command</th><th>What you get</th><th>Use when</th></tr></thead>
+        <tbody>
+          <tr><td><code>pct enter</code></td><td>Direct root shell, no login prompt</td><td>Quick admin access, scripting</td></tr>
+          <tr><td><code>pct console</code></td><td>Console with getty login</td><td>Testing boot behavior, login troubleshooting</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- POWER -->
+  <section id="power">
+    <h2>Starting, Stopping, and Restarting</h2>
+
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Start a stopped container</span>
+<span class="cmd">pct start</span> <span class="flag">&lt;ctid&gt;</span>
+
+<span class="comment"># Graceful shutdown</span>
+<span class="cmd">pct shutdown</span> <span class="flag">&lt;ctid&gt;</span>
+
+<span class="comment"># Force stop immediately</span>
+<span class="cmd">pct stop</span> <span class="flag">&lt;ctid&gt;</span>
+
+<span class="comment"># Reboot</span>
+<span class="cmd">pct reboot</span> <span class="flag">&lt;ctid&gt;</span>
+
+<span class="comment"># Suspend to disk</span>
+<span class="cmd">pct suspend</span> <span class="flag">&lt;ctid&gt;</span>
+
+<span class="comment"># Resume from suspend</span>
+<span class="cmd">pct resume</span> <span class="flag">&lt;ctid&gt;</span></code></pre>
+    </div>
+  </section>
+
+  <!-- STATUS -->
+  <section id="status">
+    <h2>Checking Status</h2>
+
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Single container</span>
+<span class="cmd">pct status</span> <span class="flag">&lt;ctid&gt;</span>
+
+<span class="comment"># All containers</span>
+<span class="cmd">pct list</span></code></pre>
+    </div>
+
+    <div class="code-block">
+      <pre><code><span class="cmd">pct status</span> 201
+<span class="out">status: running</span></code></pre>
+    </div>
+  </section>
+
+  <!-- CONFIG -->
+  <section id="config">
+    <h2>Viewing and Modifying Config</h2>
+
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="cmd">pct config</span> <span class="flag">&lt;ctid&gt;</span></code></pre>
+    </div>
+
+    <p>Sample output:</p>
+
+    <div class="code-block">
+      <pre><code><span class="out">arch: amd64
+cores: 2
+hostname: zebra
+memory: 2048
+nameserver: 8.8.8.8
+net0: name=eth0,bridge=vmbr0,firewall=1,hwaddr=BC:24:11:AA:BB:CC,ip=dhcp,type=veth
+onboot: 1
+ostype: ubuntu
+rootfs: local-lvm:vm-201-disk-0,size=16G
+swap: 512</span></code></pre>
+    </div>
+
+    <h3>Modifying with pct set</h3>
+
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Change memory</span>
+<span class="cmd">pct set</span> <span class="flag">&lt;ctid&gt;</span> <span class="flag">--memory</span> <span class="str">4096</span>
+
+<span class="comment"># Change core count</span>
+<span class="cmd">pct set</span> <span class="flag">&lt;ctid&gt;</span> <span class="flag">--cores</span> <span class="str">4</span>
+
+<span class="comment"># Set hostname</span>
+<span class="cmd">pct set</span> <span class="flag">&lt;ctid&gt;</span> <span class="flag">--hostname</span> <span class="str">new-name</span>
+
+<span class="comment"># Add a bind mount from host into container</span>
+<span class="cmd">pct set</span> <span class="flag">&lt;ctid&gt;</span> <span class="flag">--mp0</span> <span class="str">/host/path,mp=/container/path</span>
+
+<span class="comment"># Enable autostart on host boot</span>
+<span class="cmd">pct set</span> <span class="flag">&lt;ctid&gt;</span> <span class="flag">--onboot</span> <span class="str">1</span></code></pre>
+    </div>
+  </section>
+
+  <!-- CREATE -->
+  <section id="create">
+    <h2>Creating a Container</h2>
+
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="cmd">pct create</span> <span class="flag">&lt;ctid&gt;</span> <span class="str">&lt;template&gt;</span> \
+  <span class="flag">--hostname</span> <span class="str">&lt;name&gt;</span> \
+  <span class="flag">--memory</span> <span class="str">&lt;mb&gt;</span> \
+  <span class="flag">--cores</span> <span class="str">&lt;n&gt;</span> \
+  <span class="flag">--rootfs</span> <span class="str">&lt;storage&gt;:&lt;size-gb&gt;</span> \
+  <span class="flag">--net0</span> <span class="str">name=eth0,bridge=vmbr0,ip=dhcp</span> \
+  <span class="flag">--ostype</span> <span class="str">ubuntu</span> \
+  <span class="flag">--unprivileged</span> <span class="str">1</span>
+<span class="cmd">pct start</span> <span class="flag">&lt;ctid&gt;</span></code></pre>
+    </div>
+
+    <p>Example — a 2-core, 2GB Ubuntu container:</p>
+
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="cmd">pct create</span> 202 <span class="str">local:vztmpl/ubuntu-24.04-standard_24.04-2_amd64.tar.zst</span> \
+  <span class="flag">--hostname</span> <span class="str">pangolin</span> \
+  <span class="flag">--memory</span> <span class="str">2048</span> \
+  <span class="flag">--cores</span> <span class="str">2</span> \
+  <span class="flag">--rootfs</span> <span class="str">local-lvm:16</span> \
+  <span class="flag">--net0</span> <span class="str">name=eth0,bridge=vmbr0,ip=dhcp</span> \
+  <span class="flag">--ostype</span> <span class="str">ubuntu</span> \
+  <span class="flag">--unprivileged</span> <span class="str">1</span>
+<span class="cmd">pct start</span> 202</code></pre>
+    </div>
+
+    <div class="banner info">
+      <div class="banner-icon">&#9432;</div>
+      <div class="banner-body">
+        <strong>Unprivileged containers</strong>
+        <p>Always use <code>--unprivileged 1</code> unless you have a specific reason not to. Unprivileged containers run as a non-root user on the host, significantly limiting the damage from a container escape.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- SNAPSHOTS -->
+  <section id="snapshots">
+    <h2>Snapshots</h2>
+
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Create a snapshot</span>
+<span class="cmd">pct snapshot</span> <span class="flag">&lt;ctid&gt;</span> <span class="str">&lt;name&gt;</span> <span class="flag">--description</span> <span class="str">"before upgrade"</span>
+
+<span class="comment"># List snapshots</span>
+<span class="cmd">pct listsnapshot</span> <span class="flag">&lt;ctid&gt;</span>
+
+<span class="comment"># Roll back</span>
+<span class="cmd">pct rollback</span> <span class="flag">&lt;ctid&gt;</span> <span class="str">&lt;name&gt;</span>
+
+<span class="comment"># Delete a snapshot</span>
+<span class="cmd">pct delsnapshot</span> <span class="flag">&lt;ctid&gt;</span> <span class="str">&lt;name&gt;</span></code></pre>
+    </div>
+
+    <div class="banner warning">
+      <div class="banner-icon">&#9888;</div>
+      <div class="banner-body">
+        <strong>Storage backend must support snapshots</strong>
+        <p>Container snapshots require ZFS, LVM-thin, or Ceph. Plain LVM and directory-based storage do not support snapshots. Check your storage type in <code>pvesm status</code>.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- CLONE -->
+  <section id="clone">
+    <h2>Cloning</h2>
+
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Full clone — independent copy</span>
+<span class="cmd">pct clone</span> <span class="flag">&lt;ctid&gt;</span> <span class="flag">&lt;new-ctid&gt;</span> <span class="flag">--hostname</span> <span class="str">&lt;new-name&gt;</span> <span class="flag">--full</span>
+
+<span class="comment"># Linked clone — shares base storage (storage must support it)</span>
+<span class="cmd">pct clone</span> <span class="flag">&lt;ctid&gt;</span> <span class="flag">&lt;new-ctid&gt;</span> <span class="flag">--hostname</span> <span class="str">&lt;new-name&gt;</span></code></pre>
+    </div>
+  </section>
+
+  <!-- EXEC -->
+  <section id="exec">
+    <h2>Running Commands</h2>
+
+    <p>Run a command inside a container without entering an interactive shell:</p>
+
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="cmd">pct exec</span> <span class="flag">&lt;ctid&gt;</span> -- <span class="str">&lt;command&gt;</span>
+
+<span class="comment"># Examples</span>
+<span class="cmd">pct exec</span> 201 -- uptime
+<span class="cmd">pct exec</span> 201 -- bash -c <span class="str">"df -h /"</span>
+<span class="cmd">pct exec</span> 201 -- systemctl status nginx</code></pre>
+    </div>
+  </section>
+
+  <!-- FILES -->
+  <section id="files">
+    <h2>File Transfer</h2>
+
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Push a file from the host into a container</span>
+<span class="cmd">pct push</span> <span class="flag">&lt;ctid&gt;</span> <span class="str">&lt;host-path&gt;</span> <span class="str">&lt;container-path&gt;</span>
+
+<span class="comment"># Pull a file from a container to the host</span>
+<span class="cmd">pct pull</span> <span class="flag">&lt;ctid&gt;</span> <span class="str">&lt;container-path&gt;</span> <span class="str">&lt;host-path&gt;</span>
+
+<span class="comment"># Examples</span>
+<span class="cmd">pct push</span> 201 /tmp/config.yaml /etc/app/config.yaml
+<span class="cmd">pct pull</span> 201 /var/log/app.log /tmp/app.log</code></pre>
+    </div>
+  </section>
+
+  <!-- MOUNT -->
+  <section id="mount">
+    <h2>Mounting the Filesystem</h2>
+
+    <p>Access a stopped container's filesystem directly from the Proxmox host — useful for
+    recovering files or editing configs when the container won't start:</p>
+
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Container must be stopped first</span>
+<span class="cmd">pct mount</span> <span class="flag">&lt;ctid&gt;</span>
+<span class="comment"># Filesystem is now at /var/lib/lxc/&lt;ctid&gt;/rootfs/</span>
+
+<span class="comment"># Unmount when done</span>
+<span class="cmd">pct unmount</span> <span class="flag">&lt;ctid&gt;</span></code></pre>
+    </div>
+  </section>
+
+  <!-- TEMPLATES -->
+  <section id="templates">
+    <h2>Templates</h2>
+
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># List downloaded templates</span>
+<span class="cmd">pveam list</span> local
+
+<span class="comment"># Browse available templates</span>
+<span class="cmd">pveam available</span> <span class="flag">--section</span> system
+
+<span class="comment"># Download a template</span>
+<span class="cmd">pveam download</span> local ubuntu-24.04-standard_24.04-2_amd64.tar.zst</code></pre>
+    </div>
+  </section>
+
+  <!-- QUICKREF -->
+  <section id="quickref">
+    <h2>Quick Reference</h2>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Task</th><th>Command</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>List all containers</td><td><code>pct list</code></td></tr>
+          <tr><td>Enter container (root shell)</td><td><code>pct enter &lt;ctid&gt;</code></td></tr>
+          <tr><td>Exit pct enter</td><td><code>exit</code> or <span class="kbd">Ctrl</span>+<span class="kbd">D</span></td></tr>
+          <tr><td>Open console (login prompt)</td><td><code>pct console &lt;ctid&gt;</code></td></tr>
+          <tr><td>Exit pct console</td><td><span class="kbd">Ctrl</span>+<span class="kbd">A</span> then <span class="kbd">q</span></td></tr>
+          <tr><td>Start container</td><td><code>pct start &lt;ctid&gt;</code></td></tr>
+          <tr><td>Graceful shutdown</td><td><code>pct shutdown &lt;ctid&gt;</code></td></tr>
+          <tr><td>Force stop</td><td><code>pct stop &lt;ctid&gt;</code></td></tr>
+          <tr><td>Reboot</td><td><code>pct reboot &lt;ctid&gt;</code></td></tr>
+          <tr><td>View config</td><td><code>pct config &lt;ctid&gt;</code></td></tr>
+          <tr><td>Modify config</td><td><code>pct set &lt;ctid&gt; --&lt;option&gt; &lt;value&gt;</code></td></tr>
+          <tr><td>Create container</td><td><code>pct create &lt;ctid&gt; &lt;template&gt; ...</code></td></tr>
+          <tr><td>Create snapshot</td><td><code>pct snapshot &lt;ctid&gt; &lt;name&gt;</code></td></tr>
+          <tr><td>List snapshots</td><td><code>pct listsnapshot &lt;ctid&gt;</code></td></tr>
+          <tr><td>Roll back snapshot</td><td><code>pct rollback &lt;ctid&gt; &lt;name&gt;</code></td></tr>
+          <tr><td>Clone container</td><td><code>pct clone &lt;ctid&gt; &lt;new-ctid&gt; --hostname &lt;name&gt; --full</code></td></tr>
+          <tr><td>Run command in container</td><td><code>pct exec &lt;ctid&gt; -- &lt;command&gt;</code></td></tr>
+          <tr><td>Push file to container</td><td><code>pct push &lt;ctid&gt; &lt;host-path&gt; &lt;ctid-path&gt;</code></td></tr>
+          <tr><td>Pull file from container</td><td><code>pct pull &lt;ctid&gt; &lt;ctid-path&gt; &lt;host-path&gt;</code></td></tr>
+          <tr><td>Mount stopped container</td><td><code>pct mount &lt;ctid&gt;</code></td></tr>
+          <tr><td>Unmount container</td><td><code>pct unmount &lt;ctid&gt;</code></td></tr>
+          <tr><td>Destroy container</td><td><code>pct destroy &lt;ctid&gt;</code></td></tr>
+          <tr><td>List templates</td><td><code>pveam list local</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+</div>
+</div>
+
+<footer>
+  <p>
+    <a href="index.html">proxmox guides</a>
+    &nbsp;&middot;&nbsp;
+    <a href="https://github.com/davidwhittington/proxmox" target="_blank" rel="noopener">github.com/davidwhittington/proxmox</a>
+    &nbsp;&middot;&nbsp; 2026
+  </p>
+</footer>
+
+<script>
+  function copyCode(btn) {
+    const pre = btn.nextElementSibling;
+    navigator.clipboard.writeText(pre.innerText).then(() => {
+      btn.textContent = 'copied';
+      btn.classList.add('copied');
+      setTimeout(() => {
+        btn.textContent = 'copy';
+        btn.classList.remove('copied');
+      }, 1800);
+    });
+  }
+</script>
+</body>
+</html>

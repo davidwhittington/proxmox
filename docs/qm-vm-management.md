@@ -1,7 +1,29 @@
-# qm VM Management — Proxmox Command Line
+# VM Management CLI Guide
 
-> `qm` is the Proxmox command-line tool for managing QEMU/KVM virtual machines.
-> Everything you can do in the web UI you can do with `qm` — faster, and scriptable.
+> `qm` is the Proxmox command-line tool for managing **QEMU/KVM virtual machines** — full VMs
+> with their own kernel, hardware emulation, and optional GPU passthrough.
+> For LXC containers, see the [Container Management CLI Guide](pct-container-management.md).
+
+---
+
+## TL;DR — The Commands You Actually Use Every Day
+
+| What you want to do | Command |
+|---------------------|---------|
+| See all VMs and their status | `qm list` |
+| Open a console (no SSH needed) | `qm terminal <vmid>` — exit with `Ctrl+O` |
+| Start a stopped VM | `qm start <vmid>` |
+| Cleanly shut down a VM | `qm shutdown <vmid>` |
+| Kill a VM that won't respond | `qm stop <vmid>` |
+| Reboot a VM | `qm reboot <vmid>` |
+| See a VM's config | `qm config <vmid>` |
+| Change a setting | `qm set <vmid> --memory 4096` |
+| Verify guest agent is talking | `qm agent <vmid> ping` |
+| Take a snapshot before changes | `qm snapshot <vmid> pre-upgrade` |
+| Roll back a snapshot | `qm rollback <vmid> pre-upgrade` |
+| Run a command in the guest | `qm guest exec <vmid> -- uptime` |
+
+That covers 90% of day-to-day use. Read on for deep dives, or jump to [Advanced Operations](#advanced-operations).
 
 ---
 
@@ -284,6 +306,191 @@ qm guest exec 100 -- bash -c "df -h /"
 
 ---
 
+## Sending Keystrokes — qm sendkey
+
+
+
+Injects a keypress directly into a running VM. Useful for interacting with GRUB, BIOS, or a
+locked console without opening the noVNC viewer.
+
+```bash
+qm sendkey <vmid> <key>
+
+# Send Ctrl+Alt+Delete
+qm sendkey 100 ctrl-alt-delete
+
+# Press Enter (advance through a bootloader prompt)
+qm sendkey 100 ret
+
+# Send Escape
+qm sendkey 100 esc
+
+# Send a character
+qm sendkey 100 y
+```
+
+Key names follow QEMU conventions: `ret`, `esc`, `spc`, `ctrl-c`, `shift-a`, etc.
+
+---
+
+## Advanced Operations
+
+Less common commands for disk management, cloud-init, migrations, diagnostics, and VM import.
+
+### Disk Operations
+
+```bash
+# Grow disk by 20GB
+qm disk resize <vmid> scsi0 +20G
+
+# Move disk to different storage (--delete removes source after move)
+qm disk move <vmid> scsi0 ceph-pool --delete
+
+# Import a disk image file as a new disk
+qm disk import <vmid> /path/to/disk.qcow2 local-lvm
+
+# Detach a disk (--purge also deletes the storage volume)
+qm disk unlink <vmid> --idlist scsi1
+qm disk unlink <vmid> --idlist scsi1 --purge
+
+# Force rescan of storage
+qm disk rescan
+```
+
+### Cloud-init Management
+
+```bash
+# Show the rendered cloud-init config (user / network / meta)
+qm cloudinit dump <vmid> user
+qm cloudinit dump <vmid> network
+
+# Show pending cloud-init changes not yet written to the ISO
+qm cloudinit pending <vmid>
+
+# Regenerate the cloud-init ISO after config changes
+qm cloudinit update <vmid>
+```
+
+### VM Lifecycle
+
+```bash
+# Suspend VM to disk / resume
+qm suspend <vmid>
+qm resume <vmid>
+
+# Convert a stopped VM to a template (irreversible)
+qm template <vmid>
+
+# Delete a VM and all its disks (must be stopped)
+qm destroy <vmid>
+qm destroy <vmid> --purge   # also remove from jobs and replication
+
+# Show config changes that require a reboot
+qm pending <vmid>
+
+# Change a guest user's password via the guest agent
+qm guest passwd <vmid> <username>
+```
+
+### Migration
+
+```bash
+# Live migrate to another node in the same cluster
+qm migrate <vmid> <target-node>
+qm migrate <vmid> <target-node> --targetstorage local-lvm
+
+# Migrate to a different Proxmox cluster entirely
+qm remote-migrate <vmid> [<target-vmid>] <target-endpoint> \
+  --target-bridge vmbr0 \
+  --target-storage local-lvm
+```
+
+### Diagnostics & Recovery
+
+```bash
+# Print the exact QEMU command line Proxmox uses to start the VM
+qm showcmd <vmid>
+
+# Open a raw QMP monitor session (low-level QEMU interface)
+qm monitor <vmid>
+
+# Remove a stuck lock after a failed migration or snapshot
+qm unlock <vmid>
+
+# Block in a script until the VM reaches a state (running/stopped)
+qm wait <vmid> --timeout 60
+
+# Check the result of a previously started async guest exec
+qm guest exec-status <vmid> <pid>
+```
+
+### Importing VMs
+
+```bash
+# Import a disk image to Proxmox storage
+qm import <vmid> /path/to/disk.img --storage local-lvm
+
+# Import an OVF/OVA from VMware or VirtualBox
+tar -xf vm.ova
+qm importovf <vmid> vm.ovf local-lvm
+
+# Enroll Secure Boot EFI keys (required for new UEFI VMs with SB enabled)
+qm enroll-efi-keys <vmid>
+```
+
+### Full Command Reference
+
+| Command | What it does |
+|---------|-------------|
+| `qm list` | List all VMs |
+| `qm status <vmid>` | Show status of a single VM |
+| `qm start <vmid>` | Start a stopped VM |
+| `qm shutdown <vmid>` | Graceful shutdown via ACPI |
+| `qm stop <vmid>` | Force stop |
+| `qm reboot <vmid>` | Graceful reboot |
+| `qm reset <vmid>` | Hard reset |
+| `qm suspend <vmid>` | Suspend to disk |
+| `qm resume <vmid>` | Resume from suspend |
+| `qm terminal <vmid>` | Serial console (exit: Ctrl+O) |
+| `qm sendkey <vmid> <key>` | Inject a keypress |
+| `qm monitor <vmid>` | Open QMP monitor |
+| `qm config <vmid>` | Show config |
+| `qm set <vmid> [OPTIONS]` | Modify config |
+| `qm pending <vmid>` | Show reboot-pending changes |
+| `qm showcmd <vmid>` | Print raw QEMU command line |
+| `qm snapshot <vmid> <name>` | Create snapshot |
+| `qm listsnapshot <vmid>` | List snapshots |
+| `qm rollback <vmid> <name>` | Roll back to snapshot |
+| `qm delsnapshot <vmid> <name>` | Delete snapshot |
+| `qm clone <vmid> <newid>` | Clone a VM |
+| `qm create <vmid>` | Create a new VM |
+| `qm destroy <vmid>` | Delete VM and disks |
+| `qm template <vmid>` | Convert to template |
+| `qm migrate <vmid> <node>` | Migrate to another node |
+| `qm remote-migrate <vmid> ...` | Migrate to different cluster |
+| `qm unlock <vmid>` | Remove stuck lock |
+| `qm wait <vmid>` | Wait for VM state in scripts |
+| `qm disk resize <vmid> <disk> <size>` | Resize a disk |
+| `qm disk move <vmid> <disk> <storage>` | Move disk to storage |
+| `qm disk import <vmid> <src> <storage>` | Import disk image |
+| `qm disk unlink <vmid> --idlist <disk>` | Detach/delete disk |
+| `qm disk rescan` | Force storage rescan |
+| `qm cloudinit dump <vmid> <type>` | Show rendered cloud-init |
+| `qm cloudinit pending <vmid>` | Pending cloud-init changes |
+| `qm cloudinit update <vmid>` | Regenerate cloud-init ISO |
+| `qm guest exec <vmid> -- <cmd>` | Run command via agent |
+| `qm guest exec-status <vmid> <pid>` | Check async exec status |
+| `qm guest passwd <vmid> <user>` | Set guest user password |
+| `qm import <vmid> <source>` | Import disk image |
+| `qm importovf <vmid> <ovf> <storage>` | Import OVF/OVA |
+| `qm enroll-efi-keys <vmid>` | Enroll Secure Boot keys |
+| `qm cleanup <vmid> ...` | Clean up after failed op |
+| `qm vncproxy <vmid>` | Start VNC proxy |
+| `qm nbdstop <vmid>` | Stop NBD server |
+| `qm help` | Show help |
+
+---
+
 ## Quick Reference
 
 | Task | Command |
@@ -305,6 +512,7 @@ qm guest exec 100 -- bash -c "df -h /"
 | Roll back snapshot | `qm rollback <vmid> <name>` |
 | Clone VM | `qm clone <vmid> <new-vmid> --name <name> --full` |
 | Run command in guest | `qm guest exec <vmid> -- <command>` |
+| Send keystrokes to VM | `qm sendkey <vmid> <key>` |
 
 ---
 
@@ -313,3 +521,5 @@ qm guest exec 100 -- bash -c "df -h /"
 | Date | Note |
 |------|------|
 | 2026-03-20 | Initial document |
+| 2026-03-20 | Retitled to VM Management CLI Guide; added qm sendkey; linked to container guide |
+| 2026-03-20 | Added TL;DR section; added full Advanced Operations section (disk, cloud-init, migration, diagnostics, import, full command reference) |
