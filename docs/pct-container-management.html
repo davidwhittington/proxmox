@@ -401,6 +401,41 @@
 <div class="container">
 <div class="content">
 
+  <div class="banner info">
+    <div class="banner-icon">&#128230;</div>
+    <div class="banner-body">
+      <strong>This guide covers LXC containers</strong>
+      <p><code>pct</code> manages Linux containers that share the host kernel. For full QEMU/KVM virtual machines, see the <a href="qm-vm-management.html" style="color:var(--accent)">VM Management CLI Guide</a> (<code>qm</code>).</p>
+    </div>
+  </div>
+
+  <!-- TL;DR -->
+  <section id="tldr">
+    <h2>TL;DR — The Commands You Actually Use Every Day</h2>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>What you want to do</th><th>Command</th></tr></thead>
+        <tbody>
+          <tr><td>See all containers and their status</td><td><code>pct list</code></td></tr>
+          <tr><td>Get a root shell inside a container</td><td><code>pct enter &lt;ctid&gt;</code> — exit with <code>exit</code> or <span class="kbd">Ctrl</span>+<span class="kbd">D</span></td></tr>
+          <tr><td>Open a console with login prompt</td><td><code>pct console &lt;ctid&gt;</code> — exit with <span class="kbd">Ctrl</span>+<span class="kbd">A</span> then <span class="kbd">q</span></td></tr>
+          <tr><td>Start a stopped container</td><td><code>pct start &lt;ctid&gt;</code></td></tr>
+          <tr><td>Cleanly shut down a container</td><td><code>pct shutdown &lt;ctid&gt;</code></td></tr>
+          <tr><td>Kill a container that won't respond</td><td><code>pct stop &lt;ctid&gt;</code></td></tr>
+          <tr><td>Reboot a container</td><td><code>pct reboot &lt;ctid&gt;</code></td></tr>
+          <tr><td>See a container's config</td><td><code>pct config &lt;ctid&gt;</code></td></tr>
+          <tr><td>Change a setting</td><td><code>pct set &lt;ctid&gt; --memory 2048</code></td></tr>
+          <tr><td>Run a command without entering</td><td><code>pct exec &lt;ctid&gt; -- uptime</code></td></tr>
+          <tr><td>Take a snapshot before changes</td><td><code>pct snapshot &lt;ctid&gt; pre-upgrade</code></td></tr>
+          <tr><td>Roll back a snapshot</td><td><code>pct rollback &lt;ctid&gt; pre-upgrade</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p style="color:var(--muted);font-size:14px">That covers 90% of day-to-day use. The sections below go deeper on each topic. <a href="#advanced" style="color:var(--accent)">Advanced Operations</a> covers disk management, migration, diagnostics, restore, and the full command reference.</p>
+  </section>
+
   <div class="toc">
     <h3>Contents</h3>
     <ol>
@@ -417,16 +452,17 @@
       <li><a href="#files">File Transfer</a></li>
       <li><a href="#mount">Mounting the Filesystem</a></li>
       <li><a href="#templates">Templates</a></li>
+      <li><a href="#advanced">Advanced Operations</a>
+        <ol style="margin-top:4px">
+          <li><a href="#adv-disk">Disk Operations</a></li>
+          <li><a href="#adv-lifecycle">Container Lifecycle</a></li>
+          <li><a href="#adv-migrate">Migration</a></li>
+          <li><a href="#adv-diag">Diagnostics &amp; Recovery</a></li>
+          <li><a href="#adv-cmdref">Full Command Reference</a></li>
+        </ol>
+      </li>
       <li><a href="#quickref">Quick Reference</a></li>
     </ol>
-  </div>
-
-  <div class="banner info">
-    <div class="banner-icon">&#128230;</div>
-    <div class="banner-body">
-      <strong>This guide covers LXC containers</strong>
-      <p><code>pct</code> manages Linux containers that share the host kernel. For full QEMU/KVM virtual machines, see the <a href="qm-vm-management.html" style="color:var(--accent)">VM Management CLI Guide</a> (<code>qm</code>).</p>
-    </div>
   </div>
 
   <!-- VS VMS -->
@@ -697,6 +733,14 @@ swap: 512</span></code></pre>
         <p>Container snapshots require ZFS, LVM-thin, or Ceph. Plain LVM and directory-based storage do not support snapshots. Check your storage type in <code>pvesm status</code>.</p>
       </div>
     </div>
+
+    <div class="banner warning">
+      <div class="banner-icon">&#9888;</div>
+      <div class="banner-body">
+        <strong>pct rollback discards all changes since the snapshot</strong>
+        <p>Rolling back replaces the container's current state with the snapshot. Any data written or config changes made after the snapshot was taken are permanently lost. Take a new snapshot first if you want to preserve the current state as a fallback.</p>
+      </div>
+    </div>
   </section>
 
   <!-- CLONE -->
@@ -781,6 +825,239 @@ swap: 512</span></code></pre>
 <span class="comment"># Download a template</span>
 <span class="cmd">pveam download</span> local ubuntu-24.04-standard_24.04-2_amd64.tar.zst</code></pre>
     </div>
+  </section>
+
+  <!-- ADVANCED -->
+  <section id="advanced">
+    <h2>Advanced Operations</h2>
+    <p style="color:var(--muted)">Less common commands for disk management, container lifecycle, migration, diagnostics, and restore. If you found what you needed above, you can stop here.</p>
+  </section>
+
+  <!-- ADV: DISK -->
+  <section id="adv-disk">
+    <h2>Disk Operations</h2>
+
+    <h3>Resize a disk</h3>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Grow the root filesystem by 10GB</span>
+<span class="cmd">pct resize</span> <span class="flag">&lt;ctid&gt;</span> <span class="str">rootfs</span> <span class="flag">+10G</span>
+
+<span class="comment"># Set absolute size on an additional mount point</span>
+<span class="cmd">pct resize</span> <span class="flag">&lt;ctid&gt;</span> <span class="str">mp0</span> <span class="str">20G</span></code></pre>
+    </div>
+
+    <h3>Move a volume to different storage</h3>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Move rootfs to a different storage pool</span>
+<span class="cmd">pct move-volume</span> <span class="flag">&lt;ctid&gt;</span> <span class="str">rootfs</span> <span class="str">ceph-pool</span>
+
+<span class="comment"># Move to a different container entirely</span>
+<span class="cmd">pct move-volume</span> <span class="flag">&lt;ctid&gt;</span> <span class="str">mp0</span> <span class="str">local-lvm</span> <span class="flag">--target-vmid</span> <span class="str">&lt;new-ctid&gt;</span> <span class="flag">--target-volume</span> <span class="str">mp0</span></code></pre>
+    </div>
+
+    <h3>Force storage rescan</h3>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="cmd">pct rescan</span></code></pre>
+    </div>
+  </section>
+
+  <!-- ADV: LIFECYCLE -->
+  <section id="adv-lifecycle">
+    <h2>Container Lifecycle</h2>
+
+    <h3>Restore a container from a backup</h3>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Restore a container from a vzdump backup archive</span>
+<span class="cmd">pct restore</span> <span class="flag">&lt;ctid&gt;</span> <span class="str">/var/lib/vz/dump/lxc-&lt;ctid&gt;-*.tar.zst</span> <span class="flag">--storage</span> <span class="str">local-lvm</span></code></pre>
+    </div>
+
+    <h3>Convert to a template</h3>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Convert a stopped container to a template (irreversible — clone first if unsure)</span>
+<span class="cmd">pct template</span> <span class="flag">&lt;ctid&gt;</span></code></pre>
+    </div>
+
+    <div class="banner warning">
+      <div class="banner-icon">&#9888;</div>
+      <div class="banner-body">
+        <strong>Destructive — irreversible</strong>
+        <p><code>pct template</code> is a one-way conversion. The container can no longer be started directly — it becomes a clone source. Clone the container first if you might want to keep running it.</p>
+      </div>
+    </div>
+
+    <h3>Destroy a container</h3>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Delete a container and all its storage volumes (must be stopped)</span>
+<span class="cmd">pct destroy</span> <span class="flag">&lt;ctid&gt;</span></code></pre>
+    </div>
+
+    <div class="banner warning">
+      <div class="banner-icon">&#9888;</div>
+      <div class="banner-body">
+        <strong>Destructive — no undo</strong>
+        <p><code>pct destroy</code> permanently deletes the container and all its disks. Snapshot the container or make a backup before running this. There is no recycle bin.</p>
+      </div>
+    </div>
+
+    <h3>View pending config changes</h3>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Show config changes that require a restart to take effect</span>
+<span class="cmd">pct pending</span> <span class="flag">&lt;ctid&gt;</span></code></pre>
+    </div>
+
+    <h3>Suspend and resume</h3>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="cmd">pct suspend</span> <span class="flag">&lt;ctid&gt;</span>
+<span class="cmd">pct resume</span> <span class="flag">&lt;ctid&gt;</span></code></pre>
+    </div>
+  </section>
+
+  <!-- ADV: MIGRATE -->
+  <section id="adv-migrate">
+    <h2>Migration</h2>
+
+    <h3>Migrate to another node (same cluster)</h3>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Migrate a container to another Proxmox node in the same cluster</span>
+<span class="cmd">pct migrate</span> <span class="flag">&lt;ctid&gt;</span> <span class="str">&lt;target-node&gt;</span>
+
+<span class="comment"># Migrate with storage mapping</span>
+<span class="cmd">pct migrate</span> <span class="flag">&lt;ctid&gt;</span> <span class="str">&lt;target-node&gt;</span> <span class="flag">--target-storage</span> <span class="str">local-lvm</span></code></pre>
+    </div>
+
+    <div class="banner info">
+      <div class="banner-icon">&#9432;</div>
+      <div class="banner-body">
+        <strong>Container migration vs. VM migration</strong>
+        <p>Unlike QEMU VMs, LXC containers cannot live-migrate while running in most configurations. The container is typically stopped, migrated, and restarted on the target node. Check Proxmox docs for shared-storage setups where online migration may be possible.</p>
+      </div>
+    </div>
+
+    <h3>Remote migrate (different cluster)</h3>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="cmd">pct remote-migrate</span> <span class="flag">&lt;ctid&gt;</span> <span class="str">[&lt;target-ctid&gt;]</span> <span class="str">&lt;target-endpoint&gt;</span> \
+  <span class="flag">--target-bridge</span> <span class="str">vmbr0</span> \
+  <span class="flag">--target-storage</span> <span class="str">local-lvm</span></code></pre>
+    </div>
+  </section>
+
+  <!-- ADV: DIAG -->
+  <section id="adv-diag">
+    <h2>Diagnostics &amp; Recovery</h2>
+
+    <h3>Disk usage inside the container</h3>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Show disk usage from the container's perspective</span>
+<span class="cmd">pct df</span> <span class="flag">&lt;ctid&gt;</span></code></pre>
+    </div>
+
+    <h3>Filesystem check</h3>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Run fsck on a stopped container's rootfs</span>
+<span class="cmd">pct fsck</span> <span class="flag">&lt;ctid&gt;</span></code></pre>
+    </div>
+
+    <div class="banner warning">
+      <div class="banner-icon">&#9888;</div>
+      <div class="banner-body">
+        <strong>Container must be stopped</strong>
+        <p>Run <code>pct stop &lt;ctid&gt;</code> before running <code>pct fsck</code>. Running a filesystem check on a live filesystem will cause corruption.</p>
+      </div>
+    </div>
+
+    <h3>Trim free space (reclaim disk)</h3>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Issue TRIM/discard to reclaim unused blocks (thin-provisioned storage)</span>
+<span class="cmd">pct fstrim</span> <span class="flag">&lt;ctid&gt;</span></code></pre>
+    </div>
+
+    <h3>Show CPU set assignments</h3>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Show which host CPU cores each container is pinned to</span>
+<span class="cmd">pct cpusets</span></code></pre>
+    </div>
+
+    <h3>Unlock a stuck container</h3>
+    <div class="code-block">
+      <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      <pre><code><span class="comment"># Remove a stuck lock after a failed migration, snapshot, or backup</span>
+<span class="cmd">pct unlock</span> <span class="flag">&lt;ctid&gt;</span></code></pre>
+    </div>
+
+    <div class="banner warning">
+      <div class="banner-icon">&#9888;</div>
+      <div class="banner-body">
+        <strong>Use only when no operation is in progress</strong>
+        <p>Only run <code>pct unlock</code> when you're certain the lock is stale — not when a backup, snapshot, or migration is actively running. Clearing a live lock can corrupt the operation.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ADV: CMDREF -->
+  <section id="adv-cmdref">
+    <h2>Full Command Reference</h2>
+    <p style="color:var(--muted);margin-bottom:16px">Every <code>pct</code> subcommand, in one place.</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Command</th><th>What it does</th><th></th></tr></thead>
+        <tbody>
+          <tr><td><code>pct list</code></td><td>List all containers and status</td><td></td></tr>
+          <tr><td><code>pct status &lt;ctid&gt;</code></td><td>Show status of a single container</td><td></td></tr>
+          <tr><td><code>pct start &lt;ctid&gt;</code></td><td>Start a stopped container</td><td></td></tr>
+          <tr><td><code>pct shutdown &lt;ctid&gt;</code></td><td>Graceful shutdown</td><td></td></tr>
+          <tr><td><code>pct stop &lt;ctid&gt;</code></td><td>Force stop</td><td></td></tr>
+          <tr><td><code>pct reboot &lt;ctid&gt;</code></td><td>Reboot</td><td></td></tr>
+          <tr><td><code>pct suspend &lt;ctid&gt;</code></td><td>Suspend to disk</td><td></td></tr>
+          <tr><td><code>pct resume &lt;ctid&gt;</code></td><td>Resume from suspend</td><td></td></tr>
+          <tr><td><code>pct enter &lt;ctid&gt;</code></td><td>Root shell (no login prompt) — exit: <code>Ctrl+D</code></td><td></td></tr>
+          <tr><td><code>pct console &lt;ctid&gt;</code></td><td>Console with getty — exit: <code>Ctrl+A</code> then <code>q</code></td><td></td></tr>
+          <tr><td><code>pct exec &lt;ctid&gt; -- &lt;cmd&gt;</code></td><td>Run a command non-interactively</td><td></td></tr>
+          <tr><td><code>pct config &lt;ctid&gt;</code></td><td>Show container configuration</td><td></td></tr>
+          <tr><td><code>pct set &lt;ctid&gt; [OPTIONS]</code></td><td>Modify container configuration</td><td></td></tr>
+          <tr><td><code>pct pending &lt;ctid&gt;</code></td><td>Show config changes pending a restart</td><td></td></tr>
+          <tr><td><code>pct snapshot &lt;ctid&gt; &lt;name&gt;</code></td><td>Create a snapshot</td><td></td></tr>
+          <tr><td><code>pct listsnapshot &lt;ctid&gt;</code></td><td>List all snapshots</td><td></td></tr>
+          <tr><td><code>pct rollback &lt;ctid&gt; &lt;name&gt;</code></td><td>Roll back to a snapshot</td><td></td></tr>
+          <tr><td><code>pct delsnapshot &lt;ctid&gt; &lt;name&gt;</code></td><td>Delete a snapshot</td><td></td></tr>
+          <tr><td><code>pct clone &lt;ctid&gt; &lt;newid&gt;</code></td><td>Clone a container</td><td></td></tr>
+          <tr><td><code>pct create &lt;ctid&gt; &lt;template&gt;</code></td><td>Create a new container</td><td></td></tr>
+          <tr><td><code>pct restore &lt;ctid&gt; &lt;archive&gt;</code></td><td>Restore from vzdump backup</td><td></td></tr>
+          <tr><td><code>pct template &lt;ctid&gt;</code></td><td>Convert to template (irreversible)</td><td>&#9888;</td></tr>
+          <tr><td><code>pct destroy &lt;ctid&gt;</code></td><td>Delete container and all disks</td><td>&#9888;</td></tr>
+          <tr><td><code>pct migrate &lt;ctid&gt; &lt;node&gt;</code></td><td>Migrate to another cluster node</td><td></td></tr>
+          <tr><td><code>pct remote-migrate &lt;ctid&gt; ...</code></td><td>Migrate to a different cluster</td><td></td></tr>
+          <tr><td><code>pct resize &lt;ctid&gt; &lt;disk&gt; &lt;size&gt;</code></td><td>Resize a disk</td><td></td></tr>
+          <tr><td><code>pct move-volume &lt;ctid&gt; &lt;vol&gt; ...</code></td><td>Move volume to different storage</td><td></td></tr>
+          <tr><td><code>pct rescan</code></td><td>Force storage rescan</td><td></td></tr>
+          <tr><td><code>pct push &lt;ctid&gt; &lt;file&gt; &lt;dest&gt;</code></td><td>Push file from host to container</td><td></td></tr>
+          <tr><td><code>pct pull &lt;ctid&gt; &lt;path&gt; &lt;dest&gt;</code></td><td>Pull file from container to host</td><td></td></tr>
+          <tr><td><code>pct mount &lt;ctid&gt;</code></td><td>Mount stopped container's filesystem</td><td></td></tr>
+          <tr><td><code>pct unmount &lt;ctid&gt;</code></td><td>Unmount container filesystem</td><td></td></tr>
+          <tr><td><code>pct df &lt;ctid&gt;</code></td><td>Show container disk usage</td><td></td></tr>
+          <tr><td><code>pct fsck &lt;ctid&gt;</code></td><td>Filesystem check (container must be stopped)</td><td>&#9888;</td></tr>
+          <tr><td><code>pct fstrim &lt;ctid&gt;</code></td><td>Trim free space on thin storage</td><td></td></tr>
+          <tr><td><code>pct cpusets</code></td><td>Show CPU set assignments for all containers</td><td></td></tr>
+          <tr><td><code>pct unlock &lt;ctid&gt;</code></td><td>Remove stuck lock</td><td>&#9888;</td></tr>
+          <tr><td><code>pct help</code></td><td>Show help</td><td></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="color:var(--muted);font-size:13px;margin-top:8px">&#9888; = destructive or requires care — read the relevant section before running.</p>
   </section>
 
   <!-- QUICKREF -->

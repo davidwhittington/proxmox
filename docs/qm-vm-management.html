@@ -854,6 +854,14 @@ sudo systemctl start qemu-guest-agent</code></pre>
         <p>If the QEMU guest agent is running, Proxmox sends a filesystem freeze command before snapshotting and thaws after. Without the agent, the snapshot is crash-consistent — safe for most workloads but not ideal for databases with open transactions.</p>
       </div>
     </div>
+
+    <div class="banner warning">
+      <div class="banner-icon">&#9888;</div>
+      <div class="banner-body">
+        <strong>qm rollback discards all changes since the snapshot</strong>
+        <p>Rolling back replaces the VM's entire disk state with what was captured at snapshot time. Any data written or configuration changes made after the snapshot are permanently gone. Take a new snapshot first if you want to preserve the current state as a fallback.</p>
+      </div>
+    </div>
   </section>
 
   <!-- CLONE -->
@@ -1040,6 +1048,14 @@ sudo systemctl start qemu-guest-agent</code></pre>
     <p>Templates can't be started directly — they're designed to be cloned. This is the standard
     way to create a golden image in Proxmox: provision a VM, configure it, then convert to template.</p>
 
+    <div class="banner warning">
+      <div class="banner-icon">&#9888;</div>
+      <div class="banner-body">
+        <strong>Destructive — irreversible</strong>
+        <p><code>qm template</code> is a one-way conversion. Clone the VM first if you might want to keep running it. A template cannot be reverted to a regular VM.</p>
+      </div>
+    </div>
+
     <h3>Destroy a VM</h3>
     <div class="code-block">
       <button class="copy-btn" onclick="copyCode(this)">copy</button>
@@ -1048,6 +1064,14 @@ sudo systemctl start qemu-guest-agent</code></pre>
 
 <span class="comment"># Also purge from jobs and replication config</span>
 <span class="cmd">qm destroy</span> <span class="flag">&lt;vmid&gt;</span> <span class="flag">--purge</span></code></pre>
+    </div>
+
+    <div class="banner warning">
+      <div class="banner-icon">&#9888;</div>
+      <div class="banner-body">
+        <strong>Destructive — no undo</strong>
+        <p><code>qm destroy</code> permanently deletes the VM and all its disks. Snapshot the VM or make a backup before running this. There is no recycle bin.</p>
+      </div>
     </div>
 
     <h3>View pending config changes</h3>
@@ -1118,7 +1142,13 @@ sudo systemctl start qemu-guest-agent</code></pre>
       <pre><code><span class="comment"># Remove a stuck lock on a VM (e.g., after a failed migration or snapshot)</span>
 <span class="cmd">qm unlock</span> <span class="flag">&lt;vmid&gt;</span></code></pre>
     </div>
-    <p>VMs can get stuck in a locked state after a failed migration, snapshot, or backup. This clears the lock so you can manage the VM again. Use only when you're sure no operation is actually in progress.</p>
+    <div class="banner warning">
+      <div class="banner-icon">&#9888;</div>
+      <div class="banner-body">
+        <strong>Use only when no operation is in progress</strong>
+        <p>VMs get locked during migrations, snapshots, and backups. Only run <code>qm unlock</code> when you're certain the lock is stale — not while an operation is actively running. Clearing a live lock can corrupt the in-progress operation.</p>
+      </div>
+    </div>
 
     <h3>Wait for a VM to reach a specific state</h3>
     <div class="code-block">

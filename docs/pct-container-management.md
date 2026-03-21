@@ -8,6 +8,27 @@
 
 ---
 
+## TL;DR — The Commands You Actually Use Every Day
+
+| What you want to do | Command |
+|---------------------|---------|
+| See all containers and status | `pct list` |
+| Get a root shell inside a container | `pct enter <ctid>` — exit with `exit` or `Ctrl+D` |
+| Open console with login prompt | `pct console <ctid>` — exit with `Ctrl+A` then `q` |
+| Start a stopped container | `pct start <ctid>` |
+| Cleanly shut down a container | `pct shutdown <ctid>` |
+| Kill a container that won't respond | `pct stop <ctid>` |
+| Reboot | `pct reboot <ctid>` |
+| See a container's config | `pct config <ctid>` |
+| Change a setting | `pct set <ctid> --memory 2048` |
+| Run a command without entering | `pct exec <ctid> -- uptime` |
+| Take a snapshot before changes | `pct snapshot <ctid> pre-upgrade` |
+| Roll back a snapshot | `pct rollback <ctid> pre-upgrade` |
+
+That covers 90% of day-to-day use. Read on for deep dives, or jump to [Advanced Operations](#advanced-operations).
+
+---
+
 ## Listing Containers
 
 ```bash
@@ -196,8 +217,9 @@ pct rollback <ctid> <name>
 pct delsnapshot <ctid> <name>
 ```
 
-> Snapshots require the storage backend to support them (ZFS, LVM-thin, Ceph). Plain LVM
-> and directories do not support container snapshots.
+> **Storage:** Snapshots require ZFS, LVM-thin, or Ceph. Plain LVM and directories do not support them.
+>
+> **Warning — pct rollback:** Rolling back replaces the container's current state with the snapshot. Any data written or config changes made after the snapshot was taken are permanently lost. Take a new snapshot first if you want to preserve the current state.
 
 ---
 
@@ -269,11 +291,12 @@ Useful for recovering files from a container that won't start.
 
 ## Destroying a Container
 
+> **Warning:** `pct destroy` permanently deletes the container and all its disks. There is no undo. Snapshot or back up first.
+
 ```bash
+# Container must be stopped first
 pct destroy <ctid>
 ```
-
-The container must be stopped first. This removes the container config and all its disks.
 
 ---
 
@@ -289,6 +312,132 @@ pveam available --section system
 # Download a template
 pveam download local ubuntu-24.04-standard_24.04-2_amd64.tar.zst
 ```
+
+---
+
+## Advanced Operations
+
+Less common commands for disk management, container lifecycle, migration, diagnostics, and restore.
+
+### Disk Operations
+
+```bash
+# Grow rootfs by 10GB
+pct resize <ctid> rootfs +10G
+
+# Set absolute size on an additional mount point
+pct resize <ctid> mp0 20G
+
+# Move volume to different storage
+pct move-volume <ctid> rootfs ceph-pool
+
+# Move volume to a different container
+pct move-volume <ctid> mp0 local-lvm --target-vmid <new-ctid> --target-volume mp0
+
+# Force storage rescan
+pct rescan
+```
+
+### Container Lifecycle
+
+```bash
+# Restore from a vzdump backup archive
+pct restore <ctid> /var/lib/vz/dump/lxc-<ctid>-*.tar.zst --storage local-lvm
+
+# Convert to template (irreversible — clone first if unsure)
+pct template <ctid>
+
+# Destroy a container and all its disks (must be stopped)
+# WARNING: permanent, no undo
+pct destroy <ctid>
+
+# Show config changes pending a restart
+pct pending <ctid>
+
+# Suspend / resume
+pct suspend <ctid>
+pct resume <ctid>
+```
+
+### Migration
+
+```bash
+# Migrate to another node in the same cluster
+pct migrate <ctid> <target-node>
+pct migrate <ctid> <target-node> --target-storage local-lvm
+
+# Migrate to a different Proxmox cluster
+pct remote-migrate <ctid> [<target-ctid>] <target-endpoint> \
+  --target-bridge vmbr0 \
+  --target-storage local-lvm
+```
+
+> Note: LXC containers typically stop during migration, unlike QEMU VMs which can live-migrate. Check if your shared storage setup supports online migration.
+
+### Diagnostics & Recovery
+
+```bash
+# Show disk usage inside a container
+pct df <ctid>
+
+# Filesystem check (container must be stopped first)
+pct fsck <ctid>
+
+# Trim free space on thin-provisioned storage
+pct fstrim <ctid>
+
+# Show which host CPU cores containers are pinned to
+pct cpusets
+
+# Remove a stuck lock (only when no operation is actively running)
+# WARNING: clearing a live lock can corrupt an in-progress operation
+pct unlock <ctid>
+```
+
+### Full Command Reference
+
+| Command | What it does | |
+|---------|-------------|---|
+| `pct list` | List all containers | |
+| `pct status <ctid>` | Show status | |
+| `pct start <ctid>` | Start container | |
+| `pct shutdown <ctid>` | Graceful shutdown | |
+| `pct stop <ctid>` | Force stop | |
+| `pct reboot <ctid>` | Reboot | |
+| `pct suspend <ctid>` | Suspend to disk | |
+| `pct resume <ctid>` | Resume from suspend | |
+| `pct enter <ctid>` | Root shell — exit: `Ctrl+D` | |
+| `pct console <ctid>` | Console with getty — exit: `Ctrl+A` then `q` | |
+| `pct exec <ctid> -- <cmd>` | Run command non-interactively | |
+| `pct config <ctid>` | Show configuration | |
+| `pct set <ctid> [OPTIONS]` | Modify configuration | |
+| `pct pending <ctid>` | Show reboot-pending changes | |
+| `pct snapshot <ctid> <name>` | Create snapshot | |
+| `pct listsnapshot <ctid>` | List snapshots | |
+| `pct rollback <ctid> <name>` | Roll back to snapshot | ⚠️ |
+| `pct delsnapshot <ctid> <name>` | Delete snapshot | |
+| `pct clone <ctid> <newid>` | Clone container | |
+| `pct create <ctid> <template>` | Create new container | |
+| `pct restore <ctid> <archive>` | Restore from backup | |
+| `pct template <ctid>` | Convert to template (irreversible) | ⚠️ |
+| `pct destroy <ctid>` | Delete container and all disks | ⚠️ |
+| `pct migrate <ctid> <node>` | Migrate to another node | |
+| `pct remote-migrate <ctid> ...` | Migrate to different cluster | |
+| `pct resize <ctid> <disk> <size>` | Resize a disk | |
+| `pct move-volume <ctid> <vol> ...` | Move volume to storage | |
+| `pct rescan` | Force storage rescan | |
+| `pct push <ctid> <file> <dest>` | Push file to container | |
+| `pct pull <ctid> <path> <dest>` | Pull file from container | |
+| `pct mount <ctid>` | Mount stopped container | |
+| `pct unmount <ctid>` | Unmount container | |
+| `pct df <ctid>` | Container disk usage | |
+| `pct fsck <ctid>` | Filesystem check (stopped only) | ⚠️ |
+| `pct fstrim <ctid>` | Trim free space | |
+| `pct cpusets` | Show CPU set assignments | |
+| `pct unlock <ctid>` | Remove stuck lock | ⚠️ |
+| `pct help` | Show help | |
+
+⚠️ = destructive or requires care — read the relevant section before running.
 
 ---
 
@@ -327,3 +476,4 @@ pveam download local ubuntu-24.04-standard_24.04-2_amd64.tar.zst
 | Date | Note |
 |------|------|
 | 2026-03-20 | Initial document |
+| 2026-03-20 | Added TL;DR table; added Advanced Operations section (disk, lifecycle, migration, diagnostics, full command reference); added destructive command warnings |
